@@ -18,17 +18,20 @@ ENV SETUPTOOLS_SCM_PRETEND_VERSION_FOR_SYMFORCE=0.0.0 \
     SETUPTOOLS_SCM_PRETEND_VERSION_FOR_SKYMARSHAL=0.0.0 \
     SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0
 
+# Base workspace inside image
+WORKDIR /opt/slambench
+
 # Copy symforce submodule and build/install
-WORKDIR /opt/symforce
-COPY symforce/ /opt/symforce/
+WORKDIR /opt/slambench/symforce
+COPY symforce/ /opt/slambench/symforce/
 RUN python3 -m pip install --no-cache-dir -e .[dev] && \
     mkdir -p build && cd build && \
     cmake .. -DCMAKE_BUILD_TYPE=Release && \
     make -j"$(nproc)" bundle_adjustment_in_the_large_example
 
 # Build ceres-solver with examples (bundle_adjuster)
-WORKDIR /opt/ceres-solver
-COPY ceres-solver/ /opt/ceres-solver/
+WORKDIR /opt/slambench/ceres-solver
+COPY ceres-solver/ /opt/slambench/ceres-solver/
 RUN mkdir -p build && cd build && \
     cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_EXAMPLES=ON -DBUILD_TESTING=OFF && \
     make -j"$(nproc)"
