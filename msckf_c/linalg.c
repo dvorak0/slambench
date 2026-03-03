@@ -126,13 +126,21 @@ void apply_givens_rows(double *M, int rows, int cols, int r1, int r2, double c, 
 
 int qr_solve_givens(double *A, int m, int n, double *b) {
   // Column-major A (m x n), m>=n. b length m; on output, first n entries are solution.
+  const double eps = 1e-15;
   for (int j = 0; j < n; ++j) {
     for (int r = j + 1; r < m; ++r) {
-      double a = A[j * m + j];
       double bval = A[j * m + r];
+      if (fabs(bval) < eps) continue; // Skip exact/near-zero entries in sparse matrices.
+      double a = A[j * m + j];
       double c, s;
       givens(a, bval, &c, &s);
-      apply_givens_rows(A, m, n, j, r, c, s);
+      // Only trailing columns are needed for QR/back-substitution.
+      for (int col = j; col < n; ++col) {
+        double x = A[col * m + j];
+        double y = A[col * m + r];
+        A[col * m + j] = c * x - s * y;
+        A[col * m + r] = s * x + c * y;
+      }
       double bj = b[j];
       double br = b[r];
       b[j] = c * bj - s * br;

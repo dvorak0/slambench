@@ -264,6 +264,16 @@ int main(int argc, char **argv) {
   const double reg_lambda = 1e-6;    // light damping for all states
   const double huber_delta = 0.0;    // robust threshold (0 = disabled to match ceres default)
   double total_start = wall_seconds();
+  double residual_eval_time = 0.0;
+  double jacobian_eval_time = 0.0;
+  double point_elim_time = 0.0;
+  double point_backsolve_time = 0.0;
+  double global_camera_solve_time = 0.0;
+  int residual_eval_calls = 0;
+  int jacobian_eval_calls = 0;
+  int point_elim_calls = 0;
+  int point_backsolve_calls = 0;
+  int global_camera_solve_calls = 0;
   int max_iters = 6;
   int valid_points = 0;
 
@@ -285,7 +295,10 @@ int main(int argc, char **argv) {
   }
 
   for (int iter = 0; iter < max_iters; ++iter) {
+    double t_res0 = wall_seconds();
     double loss_prev = compute_loss(cams, R_all, pts, obs, no, huber_delta);
+    residual_eval_time += wall_seconds() - t_res0;
+    residual_eval_calls++;
     printf("iter %d loss %.6f\n", iter, loss_prev);
 
     // Count rows after eliminating points: sum(max(0, 2*obs-3))
@@ -308,6 +321,7 @@ int main(int argc, char **argv) {
       double *Hf = calloc((size_t)m * 3, sizeof(double));
       double *Hx = calloc((size_t)m * state_dim, sizeof(double));
       double *r = calloc((size_t)m, sizeof(double));
+      double t_jac0 = wall_seconds();
       for (int j = 0; j < cnt; ++j) {
         const Observation *o = &obs[point_obs[pid].indices[j]];
         const Camera *c = &cams[o->cam];
@@ -333,7 +347,11 @@ int main(int argc, char **argv) {
           Hx[(2 * j + 1) + (off + col) * m] = sw * Jc[1 * 9 + col];
         }
       }
+      jacobian_eval_time += wall_seconds() - t_jac0;
+      jacobian_eval_calls++;
+
       // Eliminate point via Givens on Hf columns
+      double t_elim0 = wall_seconds();
       for (int col = 0; col < 3; ++col) {
         for (int row = m - 1; row > col; --row) {
           double a = Hf[col * m + col];
@@ -345,6 +363,9 @@ int main(int argc, char **argv) {
           apply_givens_vec(r, col, row, c_g, s_g);
         }
       }
+      point_elim_time += wall_seconds() - t_elim0;
+      point_elim_calls++;
+
       int keep_rows = m - 3;
       for (int rr = 0; rr < keep_rows; ++rr) {
         int dest_row = row_cursor + rr;
@@ -375,7 +396,11 @@ int main(int argc, char **argv) {
       break;
     }
 
-    if (qr_solve_givens(Hred, row_cursor, state_dim, bred) != 0) {
+    double t_cam_solve0 = wall_seconds();
+    int qr_status = qr_solve_givens(Hred, row_cursor, state_dim, bred);
+    global_camera_solve_time += wall_seconds() - t_cam_solve0;
+    global_camera_solve_calls++;
+    if (qr_status != 0) {
       fprintf(stderr, "qr solve failed at iter %d\n", iter);
       free(Hred);
       free(bred);
@@ -389,6 +414,7 @@ int main(int argc, char **argv) {
       int m = 2 * cnt;
       double *Hf = calloc((size_t)m * 3, sizeof(double));
       double *rhs = calloc((size_t)m, sizeof(double));
+      double t_jac1 = wall_seconds();
       for (int j = 0; j < cnt; ++j) {
         const Observation *o = &obs[point_obs[pid].indices[j]];
         const Camera *c = &cams[o->cam];
@@ -415,7 +441,14 @@ int main(int argc, char **argv) {
         rhs[2 * j + 0] = -sw * du - hx0;
         rhs[2 * j + 1] = -sw * dv - hx1;
       }
-      if (qr_solve_givens(Hf, m, 3, rhs) == 0) {
+      jacobian_eval_time += wall_seconds() - t_jac1;
+      jacobian_eval_calls++;
+
+      double t_backsolve0 = wall_seconds();
+      int qr_point_status = qr_solve_givens(Hf, m, 3, rhs);
+      point_backsolve_time += wall_seconds() - t_backsolve0;
+      point_backsolve_calls++;
+      if (qr_point_status == 0) {
         delta_pts[3 * pid + 0] = rhs[0];
         delta_pts[3 * pid + 1] = rhs[1];
         delta_pts[3 * pid + 2] = rhs[2];
@@ -466,7 +499,10 @@ int main(int argc, char **argv) {
         pts_tmp[i].p[1] += alpha * delta_pts[3 * i + 1];
         pts_tmp[i].p[2] += alpha * delta_pts[3 * i + 2];
       }
+      double t_res1 = wall_seconds();
       loss_new = compute_loss(cams_tmp, R_tmp, pts_tmp, obs, no, huber_delta);
+      residual_eval_time += wall_seconds() - t_res1;
+      residual_eval_calls++;
       if (loss_new < loss_prev) {
         accepted = 1;
         break;
@@ -501,6 +537,12 @@ int main(int argc, char **argv) {
 
   printf("points_used: %d\n", valid_points);
   printf("iterations: %d\n", max_iters);
+  printf("Residual only evaluation: %.6f s (%d calls)\n", residual_eval_time, residual_eval_calls);
+  printf("Jacobian evaluation: %.6f s (%d calls)\n", jacobian_eval_time, jacobian_eval_calls);
+  printf("Point elimination: %.6f s (%d calls)\n", point_elim_time, point_elim_calls);
+  printf("Point backsolve: %.6f s (%d calls)\n", point_backsolve_time, point_backsolve_calls);
+  printf("Global camera solve: %.6f s (%d calls)\n", global_camera_solve_time,
+         global_camera_solve_calls);
   printf("TIME %.3f\n", total_time);
 
   for (int i = 0; i < np; ++i) free(point_obs[i].indices);
