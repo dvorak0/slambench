@@ -64,7 +64,7 @@ ceres_per_iter = ceres_total / ceres_iters if ceres_iters > 0 else float('nan')
 ratio_total = sym_total / ceres_total if ceres_total > 0 else float('inf')
 ratio_iter = sym_per_iter / ceres_per_iter if ceres_per_iter > 0 else float('inf')
 
-print(f"[bench] arch: {os.environ.get('ARCH', '?')}")
+print(f"[bench] arch: {arch}")
 print("[bench] summary (seconds):")
 print(f"{'engine':10} {'total':>8} {'iters':>7} {'per_iter':>10}")
 print(f"{'symforce':10} {sym_total:8.3f} {sym_iters:7d} {sym_per_iter:10.3f}")
