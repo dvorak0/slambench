@@ -1,0 +1,8 @@
+# Ignore local build artifacts to avoid CMake cache path pollution in image builds.
+msckf_c/build/
+symforce/build/
+ceres-solver/build/
+gtsam/build/
+
+# Runtime outputs
+*.log
