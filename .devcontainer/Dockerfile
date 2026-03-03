@@ -27,9 +27,9 @@ RUN python3 -m pip install --no-cache-dir -e .[dev] && \
     make -j"$(nproc)" bundle_adjustment_in_the_large_example
 
 # Build ceres-solver with examples (bundle_adjuster)
-WORKDIR /opt
-RUN git clone --recursive https://github.com/ceres-solver/ceres-solver.git && \
-    cd ceres-solver && mkdir -p build && cd build && \
+WORKDIR /opt/ceres-solver
+COPY ceres-solver/ /opt/ceres-solver/
+RUN mkdir -p build && cd build && \
     cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_EXAMPLES=ON -DBUILD_TESTING=OFF && \
     make -j"$(nproc)"
 

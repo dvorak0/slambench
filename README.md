@@ -3,6 +3,7 @@
 This workspace is set up to run SymForce’s `bundle_adjustment_in_the_large` example in a devcontainer per [containers.dev](https://containers.dev/).
 
 ## Build & run (no volume mount needed)
+1) Initialize submodules: `git submodule update --init --recursive` (symforce and ceres-solver).
 1) Build image: `docker build -t symforce-dev -f .devcontainer/Dockerfile .`
 2) Run benchmark inside the image:  
    `docker run --rm symforce-dev bash -lc "./run_benchmarks.sh"`

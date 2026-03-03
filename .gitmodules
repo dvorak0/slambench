@@ -1,3 +1,6 @@
 [submodule "symforce"]
 	path = symforce
 	url = https://github.com/symforce-org/symforce.git
+[submodule "ceres-solver"]
+	path = ceres-solver
+	url = https://github.com/ceres-solver/ceres-solver.git
