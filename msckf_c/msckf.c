@@ -6,6 +6,12 @@
 #include <string.h>
 #include <time.h>
 
+#if defined(MSCKF_USE_COL_QR)
+#define MSCKF_QR_SOLVER qr_solve_givens_col_order
+#else
+#define MSCKF_QR_SOLVER qr_solve_givens_row_order
+#endif
+
 typedef struct {
   double aa[3]; // angle-axis
   double t[3];  // translation
@@ -397,7 +403,7 @@ int main(int argc, char **argv) {
     }
 
     double t_cam_solve0 = wall_seconds();
-    int qr_status = qr_solve_givens(Hred, row_cursor, state_dim, bred);
+    int qr_status = MSCKF_QR_SOLVER(Hred, row_cursor, state_dim, bred);
     global_camera_solve_time += wall_seconds() - t_cam_solve0;
     global_camera_solve_calls++;
     if (qr_status != 0) {
@@ -445,7 +451,7 @@ int main(int argc, char **argv) {
       jacobian_eval_calls++;
 
       double t_backsolve0 = wall_seconds();
-      int qr_point_status = qr_solve_givens(Hf, m, 3, rhs);
+      int qr_point_status = MSCKF_QR_SOLVER(Hf, m, 3, rhs);
       point_backsolve_time += wall_seconds() - t_backsolve0;
       point_backsolve_calls++;
       if (qr_point_status == 0) {

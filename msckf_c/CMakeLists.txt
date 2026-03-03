@@ -11,3 +11,12 @@ add_library(msckf_linalg linalg.c)
 
 add_executable(msckf_runner msckf.c)
 target_link_libraries(msckf_runner PRIVATE msckf_linalg m)
+target_compile_definitions(msckf_runner PRIVATE MSCKF_USE_ROW_QR=1)
+
+add_executable(msckf_runner_row msckf.c)
+target_link_libraries(msckf_runner_row PRIVATE msckf_linalg m)
+target_compile_definitions(msckf_runner_row PRIVATE MSCKF_USE_ROW_QR=1)
+
+add_executable(msckf_runner_col msckf.c)
+target_link_libraries(msckf_runner_col PRIVATE msckf_linalg m)
+target_compile_definitions(msckf_runner_col PRIVATE MSCKF_USE_COL_QR=1)

@@ -124,65 +124,73 @@ void apply_givens_rows(double *M, int rows, int cols, int r1, int r2, double c, 
   }
 }
 
-int qr_solve_givens(double *A, int m, int n, double *b) {
-  // Incremental row-wise Givens QR (keeps interface unchanged).
-  // A is row-major (m x n), b length m. On output b[0:n] stores solution.
-  const double eps = 1e-15;
-  double *R = calloc((size_t)n * n, sizeof(double));
-  double *z = calloc((size_t)n, sizeof(double));
-  double *w = malloc(sizeof(double) * n);
-  if (!R || !z || !w) {
-    free(R);
-    free(z);
-    free(w);
-    return -1;
-  }
-
-  for (int row = 0; row < m; ++row) {
-    const double *arow = &A[(size_t)row * n];
-    memcpy(w, arow, sizeof(double) * n);
-    double t = b[row];
-
-    for (int i = 0; i < n; ++i) {
-      double wi = w[i];
-      if (fabs(wi) < eps) continue; // Skip structural zeros in sparse rows.
-
-      double rii = R[i * n + i];
-      double c, s;
-      givens(rii, wi, &c, &s);
-
-      for (int col = i; col < n; ++col) {
-        double x = R[i * n + col];
-        double y = w[col];
-        R[i * n + col] = c * x - s * y;
-        w[col] = s * x + c * y;
-      }
-      w[i] = 0.0;
-
-      double zi = z[i];
-      z[i] = c * zi - s * t;
-      t = s * zi + c * t;
-    }
-  }
-
-  // Back substitution: R x = z
+static int back_substitute_upper(const double *A, int n, double *b) {
   for (int i = n - 1; i >= 0; --i) {
-    double sum = z[i];
+    double sum = b[i];
     for (int j = i + 1; j < n; ++j) {
-      sum -= R[i * n + j] * b[j];
+      sum -= A[i * n + j] * b[j];
     }
-    double rii = R[i * n + i];
-    if (fabs(rii) < 1e-12) {
-      free(R);
-      free(z);
-      free(w);
-      return -1;
-    }
+    double rii = A[i * n + i];
+    if (fabs(rii) < 1e-12) return -1;
     b[i] = sum / rii;
   }
-
-  free(R);
-  free(z);
-  free(w);
   return 0;
+}
+
+int qr_solve_givens_row_order(double *A, int m, int n, double *b) {
+  // In-place row-wise Givens QR on row-major A (m x n), m>=n.
+  const double eps = 1e-15;
+  for (int row = 0; row < m; ++row) {
+    int pivots = row < n ? row : n;
+    for (int i = 0; i < pivots; ++i) {
+      double bval = A[row * n + i];
+      if (fabs(bval) < eps) continue;
+      double a = A[i * n + i];
+      double c, s;
+      givens(a, bval, &c, &s);
+
+      for (int col = i; col < n; ++col) {
+        double x = A[i * n + col];
+        double y = A[row * n + col];
+        A[i * n + col] = c * x - s * y;
+        A[row * n + col] = s * x + c * y;
+      }
+      double bi = b[i];
+      double br = b[row];
+      b[i] = c * bi - s * br;
+      b[row] = s * bi + c * br;
+    }
+  }
+  return back_substitute_upper(A, n, b);
+}
+
+int qr_solve_givens_col_order(double *A, int m, int n, double *b) {
+  // In-place column-elimination order Givens QR on row-major A (m x n), m>=n.
+  const double eps = 1e-15;
+  for (int j = 0; j < n; ++j) {
+    for (int r = j + 1; r < m; ++r) {
+      double bval = A[r * n + j];
+      if (fabs(bval) < eps) continue;
+      double a = A[j * n + j];
+      double c, s;
+      givens(a, bval, &c, &s);
+
+      for (int col = j; col < n; ++col) {
+        double x = A[j * n + col];
+        double y = A[r * n + col];
+        A[j * n + col] = c * x - s * y;
+        A[r * n + col] = s * x + c * y;
+      }
+      double bj = b[j];
+      double br = b[r];
+      b[j] = c * bj - s * br;
+      b[r] = s * bj + c * br;
+    }
+  }
+  return back_substitute_upper(A, n, b);
+}
+
+int qr_solve_givens(double *A, int m, int n, double *b) {
+  // Default behavior kept for backward compatibility.
+  return qr_solve_givens_row_order(A, m, n, b);
 }

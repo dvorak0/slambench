@@ -27,6 +27,8 @@ static inline void apply_givens_vec(double *v, int r1, int r2, double c, double 
 /* Least squares solve using Givens QR: A (m x n, m>=n, row-major), rhs b (length m).
  * On output b holds solution x (length n). Returns 0 on success.
  */
+int qr_solve_givens_row_order(double *A, int m, int n, double *b);
+int qr_solve_givens_col_order(double *A, int m, int n, double *b);
 int qr_solve_givens(double *A, int m, int n, double *b);
 
 #endif
