@@ -56,6 +56,8 @@ if [[ -z "$SYM_T" || -z "$CERES_T" || -z "$SYM_ITERS" || -z "$CERES_ITERS" || "$
   exit 1
 fi
 
+export ARCH CPU_MODEL CPU_CORES CPU_CACHE
+
 python3 - <<PY
 import os
 sym_total = float("$SYM_T")

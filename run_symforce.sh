@@ -18,6 +18,6 @@ echo "[symforce] dataset: $DATASET_PATH"
 echo "[symforce] running example..."
 CMD="$BUILD_DIR/bin/examples/bundle_adjustment_in_the_large_example $DATASET_PATH"
 echo "[symforce] command: $CMD"
-eval "$CMD" | tee "$LOG_FILE"
+eval "$CMD" > "$LOG_FILE" 2>&1
 
 echo "[symforce] done. Log: $LOG_FILE"

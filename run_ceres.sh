@@ -23,6 +23,6 @@ fi
 
 CMD="$BINARY --input $DATASET_PATH -num_threads=1 -linear_solver=dense_schur"
 echo "[ceres] command: $CMD"
-eval "$CMD" | tee "$LOG_FILE"
+eval "$CMD" > "$LOG_FILE" 2>&1
 
 echo "[ceres] done. Log: $LOG_FILE"
