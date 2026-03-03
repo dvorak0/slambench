@@ -10,4 +10,4 @@ docker run --rm -v "$PWD":/workspace slambench-dev bash -lc "./run_benchmarks.sh
 ```
 
 Outputs:
-- `bundle_adjustment_dubrovnik.log` (SymForce) and `bundle_adjustment_dubrovnik_ceres.log` (Ceres) in the workspace.
+- `symforce.log` (SymForce) and `ceres.log` (Ceres) in the workspace.
