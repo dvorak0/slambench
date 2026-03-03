@@ -9,7 +9,7 @@ BUILD_DIR="$SYMFORCE_DIR/build"
 DATASET="problem-16-22106-pre.txt"
 # Expect dataset to be checked into the repo under data/dubrovnik/
 DATASET_PATH="$ROOT_DIR/data/dubrovnik/$DATASET"
-LOG_FILE="$ROOT_DIR/bundle_adjustment_dubrovnik.log"
+LOG_FILE="$ROOT_DIR/symforce.log"
 
 echo "[symforce] root: $ROOT_DIR"
 echo "[symforce] dataset: $DATASET_PATH"

@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DATASET="problem-16-22106-pre.txt"
 DATASET_PATH="$ROOT_DIR/data/dubrovnik/$DATASET"
 BINARY="/opt/slambench/ceres-solver/build/bin/bundle_adjuster"
-LOG_FILE="$ROOT_DIR/bundle_adjustment_dubrovnik_ceres.log"
+LOG_FILE="$ROOT_DIR/ceres.log"
 
 echo "[ceres] root: $ROOT_DIR"
 
