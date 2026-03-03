@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SYM_LOG="$ROOT_DIR/symforce.log"
 CERES_LOG="$ROOT_DIR/ceres.log"
 GTSAM_LOG="$ROOT_DIR/gtsam.log"
+MSCKF_LOG="$ROOT_DIR/msckf.log"
 ARCH="$(uname -m)"
 CPU_MODEL="$(awk -F: '/model name/ {print $2; exit}' /proc/cpuinfo | sed 's/^ //')"
 CPU_CORES="$(nproc)"
@@ -18,6 +19,9 @@ bash "$ROOT_DIR/run_ceres.sh"
 
 echo "[bench] running gtsam..."
 bash "$ROOT_DIR/run_gtsam.sh"
+
+echo "[bench] running msckf..."
+bash "$ROOT_DIR/run_msckf.sh"
 
 parse_symforce_total() {
   local log="$1"
@@ -68,15 +72,27 @@ parse_gtsam_iters() {
   echo 1
 }
 
+parse_msckf_total() {
+  local log="$1"
+  awk '/^TIME[[:space:]]/ {print $2}' "$log" | head -n1
+}
+
+parse_msckf_iters() {
+  local log="$1"
+  awk '/^iterations:/ {print $2}' "$log" | head -n1
+}
+
 SYM_T=$(parse_symforce_total "$SYM_LOG")
 CERES_T=$(parse_ceres_total "$CERES_LOG")
 GTSAM_T=$(parse_gtsam_total "$GTSAM_LOG")
+MSCKF_T=$(parse_msckf_total "$MSCKF_LOG")
 SYM_ITERS=$(parse_symforce_iters "$SYM_LOG")
 CERES_ITERS=$(parse_ceres_iters "$CERES_LOG")
 GTSAM_ITERS=$(parse_gtsam_iters "$GTSAM_LOG")
+MSCKF_ITERS=$(parse_msckf_iters "$MSCKF_LOG")
 
-if [[ -z "$SYM_T" || -z "$CERES_T" || -z "$GTSAM_T" || -z "$SYM_ITERS" || -z "$CERES_ITERS" || -z "$GTSAM_ITERS" || "$SYM_ITERS" -eq 0 || "$CERES_ITERS" -eq 0 || "$GTSAM_ITERS" -eq 0 ]]; then
-  echo "[bench] failed to parse totals/iters (symforce: '$SYM_T' iters=$SYM_ITERS, ceres: '$CERES_T' iters=$CERES_ITERS, gtsam: '$GTSAM_T' iters=$GTSAM_ITERS)"
+if [[ -z "$SYM_T" || -z "$CERES_T" || -z "$GTSAM_T" || -z "$MSCKF_T" || -z "$SYM_ITERS" || -z "$CERES_ITERS" || -z "$GTSAM_ITERS" || -z "$MSCKF_ITERS" || "$SYM_ITERS" -eq 0 || "$CERES_ITERS" -eq 0 || "$GTSAM_ITERS" -eq 0 || "$MSCKF_ITERS" -eq 0 ]]; then
+  echo "[bench] failed to parse totals/iters (symforce: '$SYM_T' iters=$SYM_ITERS, ceres: '$CERES_T' iters=$CERES_ITERS, gtsam: '$GTSAM_T' iters=$GTSAM_ITERS, msckf: '$MSCKF_T' iters=$MSCKF_ITERS)"
   exit 1
 fi
 
@@ -87,16 +103,20 @@ import os
 sym_total = float("$SYM_T")
 ceres_total = float("$CERES_T")
 gtsam_total = float("$GTSAM_T")
+msckf_total = float("$MSCKF_T")
 sym_iters = int("$SYM_ITERS")
 ceres_iters = int("$CERES_ITERS")
 gtsam_iters = int("$GTSAM_ITERS")
+msckf_iters = int("$MSCKF_ITERS")
 
 sym_per_iter = sym_total / sym_iters if sym_iters > 0 else float('nan')
 ceres_per_iter = ceres_total / ceres_iters if ceres_iters > 0 else float('nan')
 gtsam_per_iter = gtsam_total / gtsam_iters if gtsam_iters > 0 else float('nan')
+msckf_per_iter = msckf_total / msckf_iters if msckf_iters > 0 else float('nan')
 sym_rate = sym_iters / sym_total if sym_total > 0 else float('nan')
 ceres_rate = ceres_iters / ceres_total if ceres_total > 0 else float('nan')
 gtsam_rate = gtsam_iters / gtsam_total if gtsam_total > 0 else float('nan')
+msckf_rate = msckf_iters / msckf_total if msckf_total > 0 else float('nan')
 
 arch = os.environ.get("ARCH", "?")
 cpu_model = os.environ.get("CPU_MODEL", "?")
@@ -130,6 +150,7 @@ results = [
     ("symforce", sym_total, sym_iters, sym_per_iter, sym_rate),
     ("ceres", ceres_total, ceres_iters, ceres_per_iter, ceres_rate),
     ("gtsam", gtsam_total, gtsam_iters, gtsam_per_iter, gtsam_rate),
+    ("msckf", msckf_total, msckf_iters, msckf_per_iter, msckf_rate),
 ]
 
 base_per_iter = ceres_per_iter if ceres_per_iter > 0 else None

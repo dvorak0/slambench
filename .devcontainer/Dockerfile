@@ -48,9 +48,16 @@ RUN mkdir -p build && cd build && \
              -DGTSAM_WITH_TBB=ON && \
     make -j"$(nproc)" SFMExample_bal
 
+# Build MSCKF C solver
+WORKDIR /opt/slambench/msckf_c
+COPY msckf_c/ /opt/slambench/msckf_c/
+RUN mkdir -p build && cd build && \
+    cmake .. -DCMAKE_BUILD_TYPE=Release && \
+    make -j"$(nproc)" msckf_runner
+
 # Copy scripts/data into the image workspace
 WORKDIR /workspace
-COPY run_symforce.sh run_ceres.sh run_gtsam.sh run_benchmarks.sh README.md ./ 
+COPY run_symforce.sh run_ceres.sh run_gtsam.sh run_msckf.sh run_benchmarks.sh README.md ./ 
 COPY data/ ./data/
 RUN chmod +x /workspace/run_*.sh
 

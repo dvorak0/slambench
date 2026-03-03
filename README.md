@@ -1,6 +1,6 @@
 # SlamBench BAL Benchmarks
 
-Run SymForce, Ceres, and GTSAM benchmarks in one container. Everything needed (code, binaries, dataset) is baked into the image; mount the workspace only if you want the logs on the host.
+Run SymForce, Ceres, GTSAM, and a minimal C MSCKF-style benchmark in one container. Everything needed (code, binaries, dataset) is baked into the image; mount the workspace only if you want the logs on the host.
 
 ```
 git clone --recursive git@github.com:dvorak0/slambench.git
@@ -16,4 +16,4 @@ To drop into a shell instead of running the benchmarks, override the entrypoint:
 `docker run --rm -it --entrypoint bash slambench-dev`
 
 Outputs (saved in the container or mounted workspace):
-- `symforce.log`, `ceres.log`, `gtsam.log`
+- `symforce.log`, `ceres.log`, `gtsam.log`, `msckf.log`
