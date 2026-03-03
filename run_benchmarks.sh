@@ -2,8 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SYM_LOG="$ROOT_DIR/bundle_adjustment_dubrovnik.log"
-CERES_LOG="$ROOT_DIR/bundle_adjustment_dubrovnik_ceres.log"
+SYM_LOG="$ROOT_DIR/symforce.log"
+CERES_LOG="$ROOT_DIR/ceres.log"
 
 echo "[bench] running symforce..."
 bash "$ROOT_DIR/run_symforce.sh"
