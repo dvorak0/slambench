@@ -33,6 +33,11 @@ RUN git clone --recursive https://github.com/ceres-solver/ceres-solver.git && \
     cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_EXAMPLES=ON -DBUILD_TESTING=OFF && \
     make -j"$(nproc)"
 
+# Copy scripts/data into the image workspace
+WORKDIR /workspace
+COPY run_symforce.sh run_ceres.sh run_benchmarks.sh README.md ./ 
+COPY data/ ./data/
+
 # Create a non-root user for devcontainer sessions
 ARG USERNAME=vscode
 ARG USER_UID=1000
@@ -40,11 +45,12 @@ ARG USER_GID=$USER_UID
 RUN groupadd --gid $USER_GID $USERNAME && \
     useradd --uid $USER_UID --gid $USER_GID -m $USERNAME && \
     echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/$USERNAME && \
-    chmod 0440 /etc/sudoers.d/$USERNAME
+    chmod 0440 /etc/sudoers.d/$USERNAME && \
+    chown -R $USERNAME:$USER_GID /workspace
 
 # Switch to non-root user by default
 USER $USERNAME
 ENV HOME=/home/$USERNAME
 
-# Back to workspace mount point
+# Back to workspace
 WORKDIR /workspace
