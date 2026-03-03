@@ -187,8 +187,20 @@ static void update_poses(Camera *cams, double *R_all, const double *delta, int n
   }
 }
 
+static double huber_weight(double r2, double delta) {
+  double r = sqrt(r2);
+  if (delta <= 0.0 || r <= delta) return 1.0;
+  return delta / r;
+}
+
+static double huber_cost(double r2, double delta) {
+  double r = sqrt(r2);
+  if (delta <= 0.0 || r <= delta) return 0.5 * r2;
+  return delta * (r - 0.5 * delta);
+}
+
 static double compute_loss(const Camera *cams, const double *R_all, const Point *pts,
-                           const Observation *obs, int no) {
+                           const Observation *obs, int no, double huber_delta) {
   double total = 0.0;
   for (int i = 0; i < no; ++i) {
     const Observation *o = &obs[i];
@@ -198,7 +210,7 @@ static double compute_loss(const Camera *cams, const double *R_all, const Point 
     project(c, R, pts[o->point].p, &up, &vp);
     double du = up - o->u;
     double dv = vp - o->v;
-    total += du * du + dv * dv;
+    total += huber_cost(du * du + dv * dv, huber_delta);
   }
   return total;
 }
@@ -222,6 +234,7 @@ int main(int argc, char **argv) {
   int state_dim = 6 * nc;
   const double anchor_lambda = 1e-3; // gauge fixing for first camera
   const double reg_lambda = 1e-6;    // light damping for all states
+  const double huber_delta = 1.0;    // robust threshold
   double total_start = wall_seconds();
   int max_iters = 5;
   int valid_points = 0;
@@ -244,7 +257,7 @@ int main(int argc, char **argv) {
   }
 
   for (int iter = 0; iter < max_iters; ++iter) {
-    double loss = compute_loss(cams, R_all, pts, obs, no);
+    double loss = compute_loss(cams, R_all, pts, obs, no, huber_delta);
     printf("iter %d loss %.6f\n", iter, loss);
 
     // Count rows after eliminating points: sum(max(0, 2*obs-3))
@@ -273,18 +286,22 @@ int main(int argc, char **argv) {
         const double *R = &R_all[o->cam * 9];
         double up, vp;
         project(c, R, pts[o->point].p, &up, &vp);
-        r[2 * j + 0] = up - o->u;
-        r[2 * j + 1] = vp - o->v;
+        double du = up - o->u;
+        double dv = vp - o->v;
+        double w = huber_weight(du * du + dv * dv, huber_delta);
+        double sw = sqrt(w);
+        r[2 * j + 0] = sw * du;
+        r[2 * j + 1] = sw * dv;
         double Jp[12], Jf[6];
         jacobians(c, R, pts[o->point].p, Jp, Jf);
         for (int col = 0; col < 3; ++col) {
-          Hf[(2 * j + 0) + col * m] = Jf[0 * 3 + col];
-          Hf[(2 * j + 1) + col * m] = Jf[1 * 3 + col];
+          Hf[(2 * j + 0) + col * m] = sw * Jf[0 * 3 + col];
+          Hf[(2 * j + 1) + col * m] = sw * Jf[1 * 3 + col];
         }
         int off = o->cam * 6;
         for (int col = 0; col < 6; ++col) {
-          Hx[(2 * j + 0) + (off + col) * m] = Jp[0 * 6 + col];
-          Hx[(2 * j + 1) + (off + col) * m] = Jp[1 * 6 + col];
+          Hx[(2 * j + 0) + (off + col) * m] = sw * Jp[0 * 6 + col];
+          Hx[(2 * j + 1) + (off + col) * m] = sw * Jp[1 * 6 + col];
         }
       }
       // Eliminate point via Givens on Hf columns
