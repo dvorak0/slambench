@@ -5,6 +5,9 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SYM_LOG="$ROOT_DIR/symforce.log"
 CERES_LOG="$ROOT_DIR/ceres.log"
 ARCH="$(uname -m)"
+CPU_MODEL="$(awk -F: '/model name/ {print $2; exit}' /proc/cpuinfo | sed 's/^ //')"
+CPU_CORES="$(nproc)"
+CPU_CACHE="$(awk -F: '/cache size/ {print $2; exit}' /proc/cpuinfo | sed 's/^ //')"
 
 echo "[bench] running symforce..."
 bash "$ROOT_DIR/run_symforce.sh"
@@ -54,6 +57,7 @@ if [[ -z "$SYM_T" || -z "$CERES_T" || -z "$SYM_ITERS" || -z "$CERES_ITERS" || "$
 fi
 
 python3 - <<PY
+import os
 sym_total = float("$SYM_T")
 ceres_total = float("$CERES_T")
 sym_iters = int("$SYM_ITERS")
@@ -64,7 +68,12 @@ ceres_per_iter = ceres_total / ceres_iters if ceres_iters > 0 else float('nan')
 ratio_total = sym_total / ceres_total if ceres_total > 0 else float('inf')
 ratio_iter = sym_per_iter / ceres_per_iter if ceres_per_iter > 0 else float('inf')
 
-print(f"[bench] arch: {arch}")
+arch = os.environ.get("ARCH", "?")
+cpu_model = os.environ.get("CPU_MODEL", "?")
+cpu_cores = os.environ.get("CPU_CORES", "?")
+cpu_cache = os.environ.get("CPU_CACHE", "?")
+
+print(f"[bench] cpu: {cpu_model} | cores: {cpu_cores} | cache: {cpu_cache} | arch: {arch}")
 print("[bench] summary (seconds):")
 print(f"{'engine':10} {'total':>8} {'iters':>7} {'per_iter':>10}")
 print(f"{'symforce':10} {sym_total:8.3f} {sym_iters:7d} {sym_per_iter:10.3f}")
