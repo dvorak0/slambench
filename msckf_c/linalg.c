@@ -125,36 +125,64 @@ void apply_givens_rows(double *M, int rows, int cols, int r1, int r2, double c, 
 }
 
 int qr_solve_givens(double *A, int m, int n, double *b) {
-  // Row-major A (m x n), m>=n. b length m; on output, first n entries are solution.
+  // Incremental row-wise Givens QR (keeps interface unchanged).
+  // A is row-major (m x n), b length m. On output b[0:n] stores solution.
   const double eps = 1e-15;
-  for (int j = 0; j < n; ++j) {
-    for (int r = j + 1; r < m; ++r) {
-      double bval = A[r * n + j];
-      if (fabs(bval) < eps) continue; // Skip exact/near-zero entries in sparse matrices.
-      double a = A[j * n + j];
+  double *R = calloc((size_t)n * n, sizeof(double));
+  double *z = calloc((size_t)n, sizeof(double));
+  double *w = malloc(sizeof(double) * n);
+  if (!R || !z || !w) {
+    free(R);
+    free(z);
+    free(w);
+    return -1;
+  }
+
+  for (int row = 0; row < m; ++row) {
+    const double *arow = &A[(size_t)row * n];
+    memcpy(w, arow, sizeof(double) * n);
+    double t = b[row];
+
+    for (int i = 0; i < n; ++i) {
+      double wi = w[i];
+      if (fabs(wi) < eps) continue; // Skip structural zeros in sparse rows.
+
+      double rii = R[i * n + i];
       double c, s;
-      givens(a, bval, &c, &s);
-      // Only trailing columns are needed for QR/back-substitution.
-      for (int col = j; col < n; ++col) {
-        double x = A[j * n + col];
-        double y = A[r * n + col];
-        A[j * n + col] = c * x - s * y;
-        A[r * n + col] = s * x + c * y;
+      givens(rii, wi, &c, &s);
+
+      for (int col = i; col < n; ++col) {
+        double x = R[i * n + col];
+        double y = w[col];
+        R[i * n + col] = c * x - s * y;
+        w[col] = s * x + c * y;
       }
-      double bj = b[j];
-      double br = b[r];
-      b[j] = c * bj - s * br;
-      b[r] = s * bj + c * br;
+      w[i] = 0.0;
+
+      double zi = z[i];
+      z[i] = c * zi - s * t;
+      t = s * zi + c * t;
     }
   }
-  // Back substitution
+
+  // Back substitution: R x = z
   for (int i = n - 1; i >= 0; --i) {
-    double sum = b[i];
+    double sum = z[i];
     for (int j = i + 1; j < n; ++j) {
-      sum -= A[i * n + j] * b[j];
+      sum -= R[i * n + j] * b[j];
     }
-    if (fabs(A[i * n + i]) < 1e-12) return -1;
-    b[i] = sum / A[i * n + i];
+    double rii = R[i * n + i];
+    if (fabs(rii) < 1e-12) {
+      free(R);
+      free(z);
+      free(w);
+      return -1;
+    }
+    b[i] = sum / rii;
   }
+
+  free(R);
+  free(z);
+  free(w);
   return 0;
 }
