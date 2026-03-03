@@ -5,7 +5,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DATASET="problem-16-22106-pre.txt"
 DATASET_PATH="$ROOT_DIR/data/dubrovnik/$DATASET"
 BINARY="/opt/slambench/ceres-solver/build/bin/bundle_adjuster"
-LOG_FILE="$ROOT_DIR/ceres.log"
+LINEAR_SOLVER="${1:-dense_schur}"
+LOG_FILE="${2:-$ROOT_DIR/ceres.log}"
 
 echo "[ceres] root: $ROOT_DIR"
 
@@ -21,7 +22,7 @@ if [[ ! -x "$BINARY" ]]; then
   exit 1
 fi
 
-CMD="$BINARY --input $DATASET_PATH -num_threads=1 -linear_solver=dense_schur"
+CMD="$BINARY --input $DATASET_PATH -num_threads=1 -linear_solver=$LINEAR_SOLVER"
 echo "[ceres] command: $CMD"
 eval "$CMD" > "$LOG_FILE" 2>&1
 
