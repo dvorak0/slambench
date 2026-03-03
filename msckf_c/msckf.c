@@ -187,6 +187,22 @@ static void update_poses(Camera *cams, double *R_all, const double *delta, int n
   }
 }
 
+static double compute_loss(const Camera *cams, const double *R_all, const Point *pts,
+                           const Observation *obs, int no) {
+  double total = 0.0;
+  for (int i = 0; i < no; ++i) {
+    const Observation *o = &obs[i];
+    const Camera *c = &cams[o->cam];
+    const double *R = &R_all[o->cam * 9];
+    double up, vp;
+    project(c, R, pts[o->point].p, &up, &vp);
+    double du = up - o->u;
+    double dv = vp - o->v;
+    total += du * du + dv * dv;
+  }
+  return total;
+}
+
 int main(int argc, char **argv) {
   const char *path = (argc > 1) ? argv[1] : "data/dubrovnik/problem-16-22106-pre.txt";
   Camera *cams = NULL;
@@ -228,6 +244,9 @@ int main(int argc, char **argv) {
   }
 
   for (int iter = 0; iter < max_iters; ++iter) {
+    double loss = compute_loss(cams, R_all, pts, obs, no);
+    printf("iter %d loss %.6f\n", iter, loss);
+
     // Count rows after eliminating points: sum(max(0, 2*obs-3))
     int total_rows = 0;
     for (int pid = 0; pid < np; ++pid) {
