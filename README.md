@@ -24,6 +24,9 @@ This workspace is set up to run SymForce’s `bundle_adjustment_in_the_large` ex
    - Uses same dataset path
    - Runs prebuilt `/opt/ceres-solver/build/bin/bundle_adjuster` with `--input <dataset> -num_threads=1 -linear_solver=dense_schur`
    - Tees output to `bundle_adjustment_dubrovnik_ceres.log`
+4) Benchmark both and summarize: `./run_benchmarks.sh`
+   - Runs both scripts and parses total times from the logs
+   - Prints symforce time, ceres time, and the ratio
 
 ## Notes
 - Container image tag used above: `symforce-dev`.
