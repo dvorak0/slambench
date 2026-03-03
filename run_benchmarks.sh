@@ -67,18 +67,60 @@ ceres_iters = int("$CERES_ITERS")
 
 sym_per_iter = sym_total / sym_iters if sym_iters > 0 else float('nan')
 ceres_per_iter = ceres_total / ceres_iters if ceres_iters > 0 else float('nan')
+sym_rate = sym_iters / sym_total if sym_total > 0 else float('nan')
+ceres_rate = ceres_iters / ceres_total if ceres_total > 0 else float('nan')
 ratio_total = sym_total / ceres_total if ceres_total > 0 else float('inf')
 ratio_iter = sym_per_iter / ceres_per_iter if ceres_per_iter > 0 else float('inf')
+ratio_rate = sym_rate / ceres_rate if ceres_rate > 0 else float('inf')
 
 arch = os.environ.get("ARCH", "?")
 cpu_model = os.environ.get("CPU_MODEL", "?")
 cpu_cores = os.environ.get("CPU_CORES", "?")
 cpu_cache = os.environ.get("CPU_CACHE", "?")
 
+def make_table(headers, rows):
+    widths = [
+        max(len(str(headers[i])), *(len(str(r[i])) for r in rows))
+        for i in range(len(headers))
+    ]
+    align = ["<"] + [">"] * (len(headers) - 1)
+
+    def sep(char="-"):
+        return "+" + "+".join(char * (w + 2) for w in widths) + "+"
+
+    def fmt_row(row):
+        return "|" + "|".join(
+            f" {str(row[i]):{align[i]}{widths[i]}} " for i in range(len(headers))
+        ) + "|"
+
+    return "\n".join(
+        [sep("-"), fmt_row(headers), sep("=")]
+        + [fmt_row(r) for r in rows]
+        + [sep("-")]
+    )
+
+headers = ["engine", "total (s)", "iters", "per_iter (s)", "iter/s", "per_iter ratio"]
+
+rows = [
+    [
+        "symforce",
+        f"{sym_total:.3f}",
+        f"{sym_iters:d}",
+        f"{sym_per_iter:.3f}",
+        f"{sym_rate:.2f}",
+        f"{ratio_iter:.3f}x",
+    ],
+    [
+        "ceres",
+        f"{ceres_total:.3f}",
+        f"{ceres_iters:d}",
+        f"{ceres_per_iter:.3f}",
+        f"{ceres_rate:.2f}",
+        "1.000x",
+    ],
+]
+
 print(f"[bench] cpu: {cpu_model} | cores: {cpu_cores} | cache: {cpu_cache} | arch: {arch}")
-print("[bench] summary (seconds):")
-print(f"{'engine':10} {'total':>8} {'iters':>7} {'per_iter':>10}")
-print(f"{'symforce':10} {sym_total:8.3f} {sym_iters:7d} {sym_per_iter:10.3f}")
-print(f"{'ceres':10} {ceres_total:8.3f} {ceres_iters:7d} {ceres_per_iter:10.3f}")
-print(f"{'ratio sym/ceres':>24} {ratio_total:8.3f} {'' :7} {ratio_iter:10.3f}x")
+print("[bench] summary:")
+print(make_table(headers, rows))
 PY

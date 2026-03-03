@@ -40,6 +40,7 @@ RUN mkdir -p build && cd build && \
 WORKDIR /workspace
 COPY run_symforce.sh run_ceres.sh run_benchmarks.sh README.md ./ 
 COPY data/ ./data/
+RUN chmod +x /workspace/run_*.sh
 
 # Create a non-root user for devcontainer sessions
 ARG USERNAME=vscode
@@ -57,3 +58,4 @@ ENV HOME=/home/$USERNAME
 
 # Back to workspace
 WORKDIR /workspace
+ENTRYPOINT ["/bin/bash", "/workspace/run_benchmarks.sh"]

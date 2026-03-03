@@ -6,8 +6,14 @@ Run both SymForce and Ceres benchmarks in one container. Everything needed (code
 git clone --recursive git@github.com:dvorak0/slambench.git
 cd slambench
 docker build -t slambench-dev -f .devcontainer/Dockerfile .
-docker run --rm -v "$PWD":/workspace slambench-dev bash -lc "./run_benchmarks.sh"
+docker run --rm -v "$PWD":/workspace slambench-dev
 ```
 
 Outputs:
 - `symforce.log` (SymForce) and `ceres.log` (Ceres) in the workspace.
+
+To drop into a shell instead of running the benchmarks, override the entrypoint:
+
+```
+docker run --rm -it --entrypoint bash slambench-dev
+```
