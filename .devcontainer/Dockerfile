@@ -1,10 +1,12 @@
 FROM ubuntu:22.04
 
-# Install build essentials, Python 3.10 toolchain, sudo, and deps for symforce build
+# Install build essentials, Python 3.10 toolchain, sudo, and deps for symforce/ceres build
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         python3 python3-pip python3-dev python3-venv \
         build-essential cmake ninja-build libgmp-dev \
+        libgoogle-glog-dev libgflags-dev libatlas-base-dev libsuitesparse-dev libeigen3-dev \
+        libabsl-dev \
         git curl ca-certificates sudo && \
     rm -rf /var/lib/apt/lists/*
 
@@ -23,6 +25,13 @@ RUN python3 -m pip install --no-cache-dir -e .[dev] && \
     mkdir -p build && cd build && \
     cmake .. -DCMAKE_BUILD_TYPE=Release && \
     make -j"$(nproc)" bundle_adjustment_in_the_large_example
+
+# Build ceres-solver with examples (bundle_adjuster)
+WORKDIR /opt
+RUN git clone --recursive https://github.com/ceres-solver/ceres-solver.git && \
+    cd ceres-solver && mkdir -p build && cd build && \
+    cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_EXAMPLES=ON -DBUILD_TESTING=OFF && \
+    make -j"$(nproc)"
 
 # Create a non-root user for devcontainer sessions
 ARG USERNAME=vscode

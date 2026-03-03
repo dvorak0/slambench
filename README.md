@@ -16,10 +16,14 @@ This workspace is set up to run SymForce’s `bundle_adjustment_in_the_large` ex
 
 ## One-shot run (inside container)
 1) Ensure submodule is present: `git submodule update --init --recursive`
-2) Run: `./run_symforce.sh`
+2) SymForce run: `./run_symforce.sh`
    - Expects dataset at `data/dubrovnik/problem-16-22106-pre.txt` (committed to this repo)
    - Runs prebuilt `/opt/symforce/build/bin/examples/bundle_adjustment_in_the_large_example` with that dataset
    - Tees output to `bundle_adjustment_dubrovnik.log`
+3) Ceres run: `./run_ceres.sh`
+   - Uses same dataset path
+   - Runs prebuilt `/opt/ceres-solver/build/bin/bundle_adjuster` with `--input <dataset> -num_threads=1 -linear_solver=dense_schur`
+   - Tees output to `bundle_adjustment_dubrovnik_ceres.log`
 
 ## Notes
 - Container image tag used above: `symforce-dev`.
