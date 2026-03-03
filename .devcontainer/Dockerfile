@@ -6,7 +6,7 @@ RUN apt-get update && \
         python3 python3-pip python3-dev python3-venv \
         build-essential cmake ninja-build libgmp-dev \
         libgoogle-glog-dev libgflags-dev libatlas-base-dev libsuitesparse-dev libeigen3-dev \
-        libabsl-dev \
+        libboost-all-dev libtbb-dev libabsl-dev \
         git curl ca-certificates sudo && \
     rm -rf /var/lib/apt/lists/*
 
@@ -36,9 +36,21 @@ RUN mkdir -p build && cd build && \
     cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_EXAMPLES=ON -DBUILD_TESTING=OFF && \
     make -j"$(nproc)"
 
+# Build GTSAM with examples
+WORKDIR /opt/slambench/gtsam
+COPY gtsam/ /opt/slambench/gtsam/
+RUN mkdir -p build && cd build && \
+    cmake .. -DCMAKE_BUILD_TYPE=Release \
+             -DGTSAM_BUILD_EXAMPLES=ON \
+             -DGTSAM_BUILD_TESTS=OFF \
+             -DGTSAM_BUILD_UNSTABLE=OFF \
+             -DGTSAM_BUILD_UNSTABLE_EXAMPLES=OFF \
+             -DGTSAM_WITH_TBB=ON && \
+    make -j"$(nproc)" SFMExample_bal
+
 # Copy scripts/data into the image workspace
 WORKDIR /workspace
-COPY run_symforce.sh run_ceres.sh run_benchmarks.sh README.md ./ 
+COPY run_symforce.sh run_ceres.sh run_gtsam.sh run_benchmarks.sh README.md ./ 
 COPY data/ ./data/
 RUN chmod +x /workspace/run_*.sh
 
