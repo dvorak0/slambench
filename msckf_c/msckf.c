@@ -53,13 +53,13 @@ static void project(const Camera *cam, const double R[9], const double Pw[3], do
 
 static void skew(const double v[3], double S[9]) {
   S[0] = 0;
-  S[1] = v[2];
-  S[2] = -v[1];
-  S[3] = -v[2];
+  S[1] = -v[2];
+  S[2] = v[1];
+  S[3] = v[2];
   S[4] = 0;
-  S[5] = v[0];
-  S[6] = v[1];
-  S[7] = -v[0];
+  S[5] = -v[0];
+  S[6] = -v[1];
+  S[7] = v[0];
   S[8] = 0;
 }
 
@@ -108,27 +108,27 @@ static void jacobians(const Camera *cam, const double R[9], const double Pw[3], 
   skew(RPw, S);
   // Build 3x6 [ -S | I ]
   double A[18];
-  for (int c = 0; c < 3; ++c) {
-    for (int r = 0; r < 3; ++r) {
-      A[c * 3 + r] = -S[c * 3 + r];
+  for (int r = 0; r < 3; ++r) {
+    for (int c = 0; c < 3; ++c) {
+      A[r * 6 + c] = -S[r * 3 + c];
     }
   }
-  A[9] = 1;
-  A[10] = 0;
-  A[11] = 0;
-  A[12] = 0;
-  A[13] = 1;
-  A[14] = 0;
-  A[15] = 0;
-  A[16] = 0;
-  A[17] = 1;
+  A[0 * 6 + 3] = 1;
+  A[0 * 6 + 4] = 0;
+  A[0 * 6 + 5] = 0;
+  A[1 * 6 + 3] = 0;
+  A[1 * 6 + 4] = 1;
+  A[1 * 6 + 5] = 0;
+  A[2 * 6 + 3] = 0;
+  A[2 * 6 + 4] = 0;
+  A[2 * 6 + 5] = 1;
 
   // Pose block (2x6): Jpi (2x3) * A (3x6)
   for (int r = 0; r < 2; ++r) {
     for (int c = 0; c < 6; ++c) {
       double s = 0.0;
       for (int k = 0; k < 3; ++k) {
-        s += Jpi[r * 3 + k] * A[c * 3 + k];
+        s += Jpi[r * 3 + k] * A[k * 6 + c];
       }
       J_cam[r * 9 + c] = s;
     }
@@ -147,7 +147,7 @@ static void jacobians(const Camera *cam, const double R[9], const double Pw[3], 
     for (int c = 0; c < 3; ++c) {
       double s = 0.0;
       for (int k = 0; k < 3; ++k) {
-        s += Jpi[r * 3 + k] * R[c * 3 + k];
+        s += Jpi[r * 3 + k] * R[k * 3 + c];
       }
       J_point[r * 3 + c] = s;
     }
@@ -308,7 +308,7 @@ int main(int argc, char **argv) {
       if (c >= 2) total_rows += (2 * c - 3);
     }
     int rows_with_reg = total_rows + state_dim; // per-state regularization (includes anchor)
-    double *Hred = calloc((size_t)rows_with_reg * state_dim, sizeof(double)); // column-major
+    double *Hred = calloc((size_t)rows_with_reg * state_dim, sizeof(double)); // row-major
     double *bred = calloc((size_t)rows_with_reg, sizeof(double));
     int row_cursor = 0;
     valid_points = 0;
@@ -338,13 +338,13 @@ int main(int argc, char **argv) {
         double Jc[18], Jf[6];
         jacobians(c, R, pts[o->point].p, Jc, Jf);
         for (int col = 0; col < 3; ++col) {
-          Hf[(2 * j + 0) + col * m] = sw * Jf[0 * 3 + col];
-          Hf[(2 * j + 1) + col * m] = sw * Jf[1 * 3 + col];
+          Hf[(2 * j + 0) * 3 + col] = sw * Jf[0 * 3 + col];
+          Hf[(2 * j + 1) * 3 + col] = sw * Jf[1 * 3 + col];
         }
         int off = o->cam * 9;
         for (int col = 0; col < 9; ++col) {
-          Hx[(2 * j + 0) + (off + col) * m] = sw * Jc[0 * 9 + col];
-          Hx[(2 * j + 1) + (off + col) * m] = sw * Jc[1 * 9 + col];
+          Hx[(2 * j + 0) * state_dim + (off + col)] = sw * Jc[0 * 9 + col];
+          Hx[(2 * j + 1) * state_dim + (off + col)] = sw * Jc[1 * 9 + col];
         }
       }
       jacobian_eval_time += wall_seconds() - t_jac0;
@@ -354,8 +354,8 @@ int main(int argc, char **argv) {
       double t_elim0 = wall_seconds();
       for (int col = 0; col < 3; ++col) {
         for (int row = m - 1; row > col; --row) {
-          double a = Hf[col * m + col];
-          double b = Hf[col * m + row];
+          double a = Hf[col * 3 + col];
+          double b = Hf[row * 3 + col];
           double c_g, s_g;
           givens(a, b, &c_g, &s_g);
           apply_givens_rows(Hf, m, 3, col, row, c_g, s_g);
@@ -370,7 +370,7 @@ int main(int argc, char **argv) {
       for (int rr = 0; rr < keep_rows; ++rr) {
         int dest_row = row_cursor + rr;
         for (int c = 0; c < state_dim; ++c) {
-          Hred[c * rows_with_reg + dest_row] = Hx[(3 + rr) + c * m];
+          Hred[dest_row * state_dim + c] = Hx[(3 + rr) * state_dim + c];
         }
         bred[dest_row] = r[3 + rr];
       }
@@ -384,7 +384,7 @@ int main(int argc, char **argv) {
     for (int j = 0; j < state_dim; ++j) {
       double lam = (j < 6) ? anchor_lambda : reg_lambda;
       int rrow = row_cursor + j;
-      Hred[j * rows_with_reg + rrow] = sqrt(lam);
+      Hred[rrow * state_dim + j] = sqrt(lam);
       bred[rrow] = 0.0;
     }
     row_cursor += state_dim;
@@ -428,8 +428,8 @@ int main(int argc, char **argv) {
         double Jc[18], Jf[6];
         jacobians(c, R, pts[o->point].p, Jc, Jf);
         for (int col = 0; col < 3; ++col) {
-          Hf[(2 * j + 0) + col * m] = sw * Jf[0 * 3 + col];
-          Hf[(2 * j + 1) + col * m] = sw * Jf[1 * 3 + col];
+          Hf[(2 * j + 0) * 3 + col] = sw * Jf[0 * 3 + col];
+          Hf[(2 * j + 1) * 3 + col] = sw * Jf[1 * 3 + col];
         }
         int off = o->cam * 9;
         double hx0 = 0.0;

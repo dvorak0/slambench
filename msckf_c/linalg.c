@@ -15,16 +15,16 @@ void cross3(const double a[3], const double b[3], double out[3]) {
 }
 
 void mat3_mul_vec(const double R[9], const double v[3], double out[3]) {
-  out[0] = R[0] * v[0] + R[3] * v[1] + R[6] * v[2];
-  out[1] = R[1] * v[0] + R[4] * v[1] + R[7] * v[2];
-  out[2] = R[2] * v[0] + R[5] * v[1] + R[8] * v[2];
+  out[0] = R[0] * v[0] + R[1] * v[1] + R[2] * v[2];
+  out[1] = R[3] * v[0] + R[4] * v[1] + R[5] * v[2];
+  out[2] = R[6] * v[0] + R[7] * v[1] + R[8] * v[2];
 }
 
 void mat3_mul(const double A[9], const double B[9], double out[9]) {
-  for (int c = 0; c < 3; ++c) {
-    for (int r = 0; r < 3; ++r) {
-      out[c * 3 + r] = A[0 * 3 + r] * B[c * 3 + 0] + A[1 * 3 + r] * B[c * 3 + 1] +
-                       A[2 * 3 + r] * B[c * 3 + 2];
+  for (int r = 0; r < 3; ++r) {
+    for (int c = 0; c < 3; ++c) {
+      out[r * 3 + c] =
+          A[r * 3 + 0] * B[0 * 3 + c] + A[r * 3 + 1] * B[1 * 3 + c] + A[r * 3 + 2] * B[2 * 3 + c];
     }
   }
 }
@@ -36,13 +36,13 @@ void mat3_identity(double I[9]) {
 
 void mat3_transpose(const double A[9], double At[9]) {
   At[0] = A[0];
-  At[1] = A[3];
-  At[2] = A[6];
-  At[3] = A[1];
+  At[1] = A[1 * 3 + 0];
+  At[2] = A[2 * 3 + 0];
+  At[3] = A[0 * 3 + 1];
   At[4] = A[4];
-  At[5] = A[7];
-  At[6] = A[2];
-  At[7] = A[5];
+  At[5] = A[2 * 3 + 1];
+  At[6] = A[0 * 3 + 2];
+  At[7] = A[1 * 3 + 2];
   At[8] = A[8];
 }
 
@@ -62,25 +62,25 @@ void angle_axis_to_rot(const double aa[3], double R[9]) {
   double t = 1.0 - c;
   double x = axis[0], y = axis[1], z = axis[2];
   R[0] = t * x * x + c;
-  R[1] = t * x * y + s * z;
-  R[2] = t * x * z - s * y;
-  R[3] = t * x * y - s * z;
+  R[1] = t * x * y - s * z;
+  R[2] = t * x * z + s * y;
+  R[3] = t * x * y + s * z;
   R[4] = t * y * y + c;
-  R[5] = t * y * z + s * x;
-  R[6] = t * x * z + s * y;
-  R[7] = t * y * z - s * x;
+  R[5] = t * y * z - s * x;
+  R[6] = t * x * z - s * y;
+  R[7] = t * y * z + s * x;
   R[8] = t * z * z + c;
 }
 
 static void skew(const double v[3], double S[9]) {
   S[0] = 0;
-  S[1] = v[2];
-  S[2] = -v[1];
-  S[3] = -v[2];
+  S[1] = -v[2];
+  S[2] = v[1];
+  S[3] = v[2];
   S[4] = 0;
-  S[5] = v[0];
-  S[6] = v[1];
-  S[7] = -v[0];
+  S[5] = -v[0];
+  S[6] = -v[1];
+  S[7] = v[0];
   S[8] = 0;
 }
 
@@ -117,29 +117,29 @@ void givens(double a, double b, double *c, double *s) {
 
 void apply_givens_rows(double *M, int rows, int cols, int r1, int r2, double c, double s) {
   for (int col = 0; col < cols; ++col) {
-    double x = M[col * rows + r1];
-    double y = M[col * rows + r2];
-    M[col * rows + r1] = c * x - s * y;
-    M[col * rows + r2] = s * x + c * y;
+    double x = M[r1 * cols + col];
+    double y = M[r2 * cols + col];
+    M[r1 * cols + col] = c * x - s * y;
+    M[r2 * cols + col] = s * x + c * y;
   }
 }
 
 int qr_solve_givens(double *A, int m, int n, double *b) {
-  // Column-major A (m x n), m>=n. b length m; on output, first n entries are solution.
+  // Row-major A (m x n), m>=n. b length m; on output, first n entries are solution.
   const double eps = 1e-15;
   for (int j = 0; j < n; ++j) {
     for (int r = j + 1; r < m; ++r) {
-      double bval = A[j * m + r];
+      double bval = A[r * n + j];
       if (fabs(bval) < eps) continue; // Skip exact/near-zero entries in sparse matrices.
-      double a = A[j * m + j];
+      double a = A[j * n + j];
       double c, s;
       givens(a, bval, &c, &s);
       // Only trailing columns are needed for QR/back-substitution.
       for (int col = j; col < n; ++col) {
-        double x = A[col * m + j];
-        double y = A[col * m + r];
-        A[col * m + j] = c * x - s * y;
-        A[col * m + r] = s * x + c * y;
+        double x = A[j * n + col];
+        double y = A[r * n + col];
+        A[j * n + col] = c * x - s * y;
+        A[r * n + col] = s * x + c * y;
       }
       double bj = b[j];
       double br = b[r];
@@ -151,10 +151,10 @@ int qr_solve_givens(double *A, int m, int n, double *b) {
   for (int i = n - 1; i >= 0; --i) {
     double sum = b[i];
     for (int j = i + 1; j < n; ++j) {
-      sum -= A[j * m + i] * b[j];
+      sum -= A[i * n + j] * b[j];
     }
-    if (fabs(A[i * m + i]) < 1e-12) return -1;
-    b[i] = sum / A[i * m + i];
+    if (fabs(A[i * n + i]) < 1e-12) return -1;
+    b[i] = sum / A[i * n + i];
   }
   return 0;
 }
