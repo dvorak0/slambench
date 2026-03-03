@@ -205,6 +205,7 @@ int main(int argc, char **argv) {
 
   int state_dim = 6 * nc;
   const double anchor_lambda = 1e-3; // gauge fixing for first camera
+  const double reg_lambda = 1e-6;    // light damping for all states
   double total_start = wall_seconds();
   int max_iters = 5;
   int valid_points = 0;
@@ -233,9 +234,9 @@ int main(int argc, char **argv) {
       int c = point_obs[pid].count;
       if (c >= 2) total_rows += (2 * c - 3);
     }
-    int rows_with_anchor = total_rows + 6; // 6 dof anchor on first camera
-    double *Hred = calloc((size_t)rows_with_anchor * state_dim, sizeof(double)); // column-major
-    double *bred = calloc((size_t)rows_with_anchor, sizeof(double));
+    int rows_with_reg = total_rows + state_dim; // per-state regularization (includes anchor)
+    double *Hred = calloc((size_t)rows_with_reg * state_dim, sizeof(double)); // column-major
+    double *bred = calloc((size_t)rows_with_reg, sizeof(double));
     int row_cursor = 0;
     valid_points = 0;
 
@@ -283,7 +284,7 @@ int main(int argc, char **argv) {
       for (int rr = 0; rr < keep_rows; ++rr) {
         int dest_row = row_cursor + rr;
         for (int c = 0; c < state_dim; ++c) {
-          Hred[c * rows_with_anchor + dest_row] = Hx[(3 + rr) + c * m];
+          Hred[c * rows_with_reg + dest_row] = Hx[(3 + rr) + c * m];
         }
         bred[dest_row] = r[3 + rr];
       }
@@ -293,13 +294,14 @@ int main(int argc, char **argv) {
       free(r);
     }
 
-    // Add anchor rows for first camera
-    for (int j = 0; j < 6; ++j) {
+    // Add per-state damping (first camera uses anchor_lambda)
+    for (int j = 0; j < state_dim; ++j) {
+      double lam = (j < 6) ? anchor_lambda : reg_lambda;
       int rrow = row_cursor + j;
-      Hred[j * rows_with_anchor + rrow] = sqrt(anchor_lambda);
+      Hred[j * rows_with_reg + rrow] = sqrt(lam);
       bred[rrow] = 0.0;
     }
-    row_cursor += 6;
+    row_cursor += state_dim;
 
     if (row_cursor < state_dim) {
       fprintf(stderr, "not enough constraints\n");
