@@ -74,13 +74,13 @@ void angle_axis_to_rot(const double aa[3], double R[9]) {
 
 static void skew(const double v[3], double S[9]) {
   S[0] = 0;
-  S[1] = -v[2];
-  S[2] = v[1];
-  S[3] = v[2];
+  S[1] = v[2];
+  S[2] = -v[1];
+  S[3] = -v[2];
   S[4] = 0;
-  S[5] = -v[0];
-  S[6] = -v[1];
-  S[7] = v[0];
+  S[5] = v[0];
+  S[6] = v[1];
+  S[7] = -v[0];
   S[8] = 0;
 }
 

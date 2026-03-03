@@ -42,8 +42,9 @@ static void project(const Camera *cam, const double R[9], const double Pw[3], do
   Xc[1] += cam->t[1];
   Xc[2] += cam->t[2];
   double invz = 1.0 / Xc[2];
-  double xn = Xc[0] * invz;
-  double yn = Xc[1] * invz;
+  // Bundler/Ceres convention uses negative z forward
+  double xn = -Xc[0] * invz;
+  double yn = -Xc[1] * invz;
   double r2 = xn * xn + yn * yn;
   double distortion = 1.0 + cam->k1 * r2 + cam->k2 * r2 * r2;
   *u = cam->f * distortion * xn;
@@ -52,40 +53,59 @@ static void project(const Camera *cam, const double R[9], const double Pw[3], do
 
 static void skew(const double v[3], double S[9]) {
   S[0] = 0;
-  S[1] = -v[2];
-  S[2] = v[1];
-  S[3] = v[2];
+  S[1] = v[2];
+  S[2] = -v[1];
+  S[3] = -v[2];
   S[4] = 0;
-  S[5] = -v[0];
-  S[6] = -v[1];
-  S[7] = v[0];
+  S[5] = v[0];
+  S[6] = v[1];
+  S[7] = -v[0];
   S[8] = 0;
 }
 
-static void jacobians(const Camera *cam, const double R[9], const double Pw[3], double J_pose[12],
+static void jacobians(const Camera *cam, const double R[9], const double Pw[3], double J_cam[18],
                       double J_point[6]) {
   double Xc[3];
-  mat3_mul_vec(R, Pw, Xc);
+  double RPw[3];
+  mat3_mul_vec(R, Pw, RPw);
+  Xc[0] = RPw[0];
+  Xc[1] = RPw[1];
+  Xc[2] = RPw[2];
   Xc[0] += cam->t[0];
   Xc[1] += cam->t[1];
   Xc[2] += cam->t[2];
   double invz = 1.0 / Xc[2];
-  double xn = Xc[0] * invz;
-  double yn = Xc[1] * invz;
+  double xn = -Xc[0] * invz;
+  double yn = -Xc[1] * invz;
+
+  double r2 = xn * xn + yn * yn;
+  double g = 1.0 + cam->k1 * r2 + cam->k2 * r2 * r2;
+  double dg_dxn = cam->k1 * 2.0 * xn + cam->k2 * 4.0 * r2 * xn;
+  double dg_dyn = cam->k1 * 2.0 * yn + cam->k2 * 4.0 * r2 * yn;
+
+  double f = cam->f;
+
+  double dpx_dxn = f * (g + xn * dg_dxn);
+  double dpx_dyn = f * (xn * dg_dyn);
+  double dpy_dxn = f * (yn * dg_dxn);
+  double dpy_dyn = f * (g + yn * dg_dyn);
+
+  double d_xn_dX = -invz;
+  double d_xn_dZ = Xc[0] * invz * invz;
+  double d_yn_dY = -invz;
+  double d_yn_dZ = Xc[1] * invz * invz;
 
   double Jpi[6];
-  Jpi[0] = invz;
-  Jpi[1] = 0.0;
-  Jpi[2] = -xn * invz;
-  Jpi[3] = 0.0;
-  Jpi[4] = invz;
-  Jpi[5] = -yn * invz;
-
-  double scale = cam->f; // ignoring derivative of distortion for simplicity
-  for (int i = 0; i < 6; ++i) Jpi[i] *= scale;
+  Jpi[0] = dpx_dxn * d_xn_dX;           // dpx/dX
+  Jpi[1] = dpx_dyn * d_yn_dY;           // dpx/dY
+  Jpi[2] = dpx_dxn * d_xn_dZ + dpx_dyn * d_yn_dZ; // dpx/dZ
+  Jpi[3] = dpy_dxn * d_xn_dX;           // dpy/dX
+  Jpi[4] = dpy_dyn * d_yn_dY;           // dpy/dY
+  Jpi[5] = dpy_dxn * d_xn_dZ + dpy_dyn * d_yn_dZ; // dpy/dZ
 
   double S[9];
-  skew(Xc, S);
+  // Rotation Jacobian is with respect to R*Pw (not translated point).
+  skew(RPw, S);
   // Build 3x6 [ -S | I ]
   double A[18];
   for (int c = 0; c < 3; ++c) {
@@ -103,16 +123,24 @@ static void jacobians(const Camera *cam, const double R[9], const double Pw[3], 
   A[16] = 0;
   A[17] = 1;
 
-  // J_pose = Jpi (2x3) * A (3x6) => 2x6 row-major
+  // Pose block (2x6): Jpi (2x3) * A (3x6)
   for (int r = 0; r < 2; ++r) {
     for (int c = 0; c < 6; ++c) {
       double s = 0.0;
       for (int k = 0; k < 3; ++k) {
         s += Jpi[r * 3 + k] * A[c * 3 + k];
       }
-      J_pose[r * 6 + c] = s;
+      J_cam[r * 9 + c] = s;
     }
   }
+
+  // Intrinsics block (2x3): [f, k1, k2]
+  J_cam[0 * 9 + 6] = g * xn;
+  J_cam[1 * 9 + 6] = g * yn;
+  J_cam[0 * 9 + 7] = f * xn * r2;
+  J_cam[1 * 9 + 7] = f * yn * r2;
+  J_cam[0 * 9 + 8] = f * xn * r2 * r2;
+  J_cam[1 * 9 + 8] = f * yn * r2 * r2;
 
   // J_point = Jpi * R  (2x3)
   for (int r = 0; r < 2; ++r) {
@@ -231,12 +259,12 @@ int main(int argc, char **argv) {
     angle_axis_to_rot(cams[i].aa, &R_all[i * 9]);
   }
 
-  int state_dim = 6 * nc;
+  int state_dim = 9 * nc;
   const double anchor_lambda = 1e-3; // gauge fixing for first camera
   const double reg_lambda = 1e-6;    // light damping for all states
-  const double huber_delta = 1.0;    // robust threshold
+  const double huber_delta = 0.0;    // robust threshold (0 = disabled to match ceres default)
   double total_start = wall_seconds();
-  int max_iters = 5;
+  int max_iters = 6;
   int valid_points = 0;
 
   // Build point -> observation index lists
@@ -257,8 +285,8 @@ int main(int argc, char **argv) {
   }
 
   for (int iter = 0; iter < max_iters; ++iter) {
-    double loss = compute_loss(cams, R_all, pts, obs, no, huber_delta);
-    printf("iter %d loss %.6f\n", iter, loss);
+    double loss_prev = compute_loss(cams, R_all, pts, obs, no, huber_delta);
+    printf("iter %d loss %.6f\n", iter, loss_prev);
 
     // Count rows after eliminating points: sum(max(0, 2*obs-3))
     int total_rows = 0;
@@ -290,18 +318,19 @@ int main(int argc, char **argv) {
         double dv = vp - o->v;
         double w = huber_weight(du * du + dv * dv, huber_delta);
         double sw = sqrt(w);
-        r[2 * j + 0] = sw * du;
-        r[2 * j + 1] = sw * dv;
-        double Jp[12], Jf[6];
-        jacobians(c, R, pts[o->point].p, Jp, Jf);
+        // Solve Hx * dx ~= -r so Gauss-Newton step follows -J^T r.
+        r[2 * j + 0] = -sw * du;
+        r[2 * j + 1] = -sw * dv;
+        double Jc[18], Jf[6];
+        jacobians(c, R, pts[o->point].p, Jc, Jf);
         for (int col = 0; col < 3; ++col) {
           Hf[(2 * j + 0) + col * m] = sw * Jf[0 * 3 + col];
           Hf[(2 * j + 1) + col * m] = sw * Jf[1 * 3 + col];
         }
-        int off = o->cam * 6;
-        for (int col = 0; col < 6; ++col) {
-          Hx[(2 * j + 0) + (off + col) * m] = sw * Jp[0 * 6 + col];
-          Hx[(2 * j + 1) + (off + col) * m] = sw * Jp[1 * 6 + col];
+        int off = o->cam * 9;
+        for (int col = 0; col < 9; ++col) {
+          Hx[(2 * j + 0) + (off + col) * m] = sw * Jc[0 * 9 + col];
+          Hx[(2 * j + 1) + (off + col) * m] = sw * Jc[1 * 9 + col];
         }
       }
       // Eliminate point via Givens on Hf columns
@@ -352,7 +381,119 @@ int main(int argc, char **argv) {
       free(bred);
       break;
     }
-    update_poses(cams, R_all, bred, nc);
+    // Recover point increments so the next linearization is consistent with the Schur step.
+    double *delta_pts = calloc((size_t)np * 3, sizeof(double));
+    for (int pid = 0; pid < np; ++pid) {
+      int cnt = point_obs[pid].count;
+      if (cnt < 2) continue;
+      int m = 2 * cnt;
+      double *Hf = calloc((size_t)m * 3, sizeof(double));
+      double *rhs = calloc((size_t)m, sizeof(double));
+      for (int j = 0; j < cnt; ++j) {
+        const Observation *o = &obs[point_obs[pid].indices[j]];
+        const Camera *c = &cams[o->cam];
+        const double *R = &R_all[o->cam * 9];
+        double up, vp;
+        project(c, R, pts[o->point].p, &up, &vp);
+        double du = up - o->u;
+        double dv = vp - o->v;
+        double w = huber_weight(du * du + dv * dv, huber_delta);
+        double sw = sqrt(w);
+        double Jc[18], Jf[6];
+        jacobians(c, R, pts[o->point].p, Jc, Jf);
+        for (int col = 0; col < 3; ++col) {
+          Hf[(2 * j + 0) + col * m] = sw * Jf[0 * 3 + col];
+          Hf[(2 * j + 1) + col * m] = sw * Jf[1 * 3 + col];
+        }
+        int off = o->cam * 9;
+        double hx0 = 0.0;
+        double hx1 = 0.0;
+        for (int col = 0; col < 9; ++col) {
+          hx0 += sw * Jc[0 * 9 + col] * bred[off + col];
+          hx1 += sw * Jc[1 * 9 + col] * bred[off + col];
+        }
+        rhs[2 * j + 0] = -sw * du - hx0;
+        rhs[2 * j + 1] = -sw * dv - hx1;
+      }
+      if (qr_solve_givens(Hf, m, 3, rhs) == 0) {
+        delta_pts[3 * pid + 0] = rhs[0];
+        delta_pts[3 * pid + 1] = rhs[1];
+        delta_pts[3 * pid + 2] = rhs[2];
+      }
+      free(Hf);
+      free(rhs);
+    }
+
+    // Backtracking line search on step length
+    double *R_tmp = malloc(sizeof(double) * 9 * nc);
+    double *t_tmp = malloc(sizeof(double) * 3 * nc);
+    Camera *cams_tmp = malloc(sizeof(Camera) * nc);
+    Point *pts_tmp = malloc(sizeof(Point) * np);
+    double alpha = 1.0;
+    double loss_new = loss_prev;
+    int accepted = 0;
+    while (alpha > 1e-4) {
+      memcpy(R_tmp, R_all, sizeof(double) * 9 * nc);
+      memcpy(pts_tmp, pts, sizeof(Point) * np);
+      for (int i = 0; i < nc; ++i) {
+        cams_tmp[i] = cams[i];
+        t_tmp[3 * i + 0] = cams[i].t[0];
+        t_tmp[3 * i + 1] = cams[i].t[1];
+        t_tmp[3 * i + 2] = cams[i].t[2];
+      }
+      // Apply scaled update to temp
+      for (int i = 0; i < nc; ++i) {
+        const double *d = &bred[i * 9];
+        double dtheta[3] = {alpha * d[0], alpha * d[1], alpha * d[2]};
+        double dt[3] = {alpha * d[3], alpha * d[4], alpha * d[5]};
+        double dR[9];
+        mat3_expmap(dtheta, dR);
+        double newR[9];
+        mat3_mul(dR, &R_tmp[i * 9], newR);
+        memcpy(&R_tmp[i * 9], newR, sizeof(double) * 9);
+        t_tmp[3 * i + 0] += dt[0];
+        t_tmp[3 * i + 1] += dt[1];
+        t_tmp[3 * i + 2] += dt[2];
+        cams_tmp[i].t[0] = t_tmp[3 * i + 0];
+        cams_tmp[i].t[1] = t_tmp[3 * i + 1];
+        cams_tmp[i].t[2] = t_tmp[3 * i + 2];
+        cams_tmp[i].f += alpha * d[6];
+        cams_tmp[i].k1 += alpha * d[7];
+        cams_tmp[i].k2 += alpha * d[8];
+      }
+      for (int i = 0; i < np; ++i) {
+        pts_tmp[i].p[0] += alpha * delta_pts[3 * i + 0];
+        pts_tmp[i].p[1] += alpha * delta_pts[3 * i + 1];
+        pts_tmp[i].p[2] += alpha * delta_pts[3 * i + 2];
+      }
+      loss_new = compute_loss(cams_tmp, R_tmp, pts_tmp, obs, no, huber_delta);
+      if (loss_new < loss_prev) {
+        accepted = 1;
+        break;
+      }
+      alpha *= 0.5;
+    }
+    if (accepted) {
+      memcpy(R_all, R_tmp, sizeof(double) * 9 * nc);
+      for (int i = 0; i < nc; ++i) {
+        cams[i].t[0] = t_tmp[3 * i + 0];
+        cams[i].t[1] = t_tmp[3 * i + 1];
+        cams[i].t[2] = t_tmp[3 * i + 2];
+        const double *d = &bred[i * 9];
+        cams[i].f += alpha * d[6];
+        cams[i].k1 += alpha * d[7];
+        cams[i].k2 += alpha * d[8];
+      }
+      memcpy(pts, pts_tmp, sizeof(Point) * np);
+      printf("  step alpha=%.4f loss=%.6f\n", alpha, loss_new);
+    } else {
+      printf("  step rejected (no decrease)\n");
+    }
+    free(R_tmp);
+    free(t_tmp);
+    free(cams_tmp);
+    free(pts_tmp);
+    free(delta_pts);
     free(Hred);
     free(bred);
   }
