@@ -11,19 +11,50 @@ ARCH="$(uname -m)"
 CPU_MODEL="$(awk -F: '/model name/ {print $2; exit}' /proc/cpuinfo | sed 's/^ //')"
 CPU_CORES="$(nproc)"
 CPU_CACHE="$(awk -F: '/cache size/ {print $2; exit}' /proc/cpuinfo | sed 's/^ //')"
+SCHED_POLICY="$(chrt -p $$ 2>/dev/null | awk -F: '/scheduling policy/ {gsub(/^ +/,"",$2); print $2; exit}')"
+SCHED_PRIORITY="$(chrt -p $$ 2>/dev/null | awk -F: '/scheduling priority/ {gsub(/^ +/,"",$2); print $2; exit}')"
+CPU_AFFINITY="$(taskset -pc $$ 2>/dev/null | awk -F: '{gsub(/^ +/,"",$2); print $2; exit}')"
+CPU_GOVERNOR="$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || true)"
 
+print_section() {
+  local title="$1"
+  echo
+  echo "========== $title =========="
+  echo
+}
+
+SCHED_POLICY="${SCHED_POLICY:-unknown}"
+SCHED_PRIORITY="${SCHED_PRIORITY:-unknown}"
+CPU_AFFINITY="${CPU_AFFINITY:-unknown}"
+CPU_GOVERNOR="${CPU_GOVERNOR:-unknown}"
+
+print_section "Environment"
+echo "[bench] arch           : $ARCH"
+echo "[bench] cpu model      : $CPU_MODEL"
+echo "[bench] cpu cores      : $CPU_CORES"
+echo "[bench] cpu cache      : $CPU_CACHE"
+echo "[bench] sched policy   : $SCHED_POLICY"
+echo "[bench] sched priority : $SCHED_PRIORITY"
+echo "[bench] cpu affinity   : $CPU_AFFINITY"
+echo "[bench] cpu governor   : $CPU_GOVERNOR"
+
+print_section "Run SymForce"
 echo "[bench] running symforce..."
 bash "$ROOT_DIR/run_symforce.sh"
 
+print_section "Run Ceres (dense_schur)"
 echo "[bench] running ceres..."
 bash "$ROOT_DIR/run_ceres.sh" dense_schur "$CERES_LOG"
 
+print_section "Run Ceres (sparse_schur)"
 echo "[bench] running ceres (sparse_schur)..."
 bash "$ROOT_DIR/run_ceres.sh" sparse_schur "$CERES_SPARSE_LOG"
 
+print_section "Run GTSAM"
 echo "[bench] running gtsam..."
 bash "$ROOT_DIR/run_gtsam.sh"
 
+print_section "Run MSCKF"
 echo "[bench] running msckf..."
 bash "$ROOT_DIR/run_msckf.sh"
 
@@ -103,6 +134,7 @@ if [[ -z "$SYM_T" || -z "$CERES_T" || -z "$CERES_SPARSE_T" || -z "$GTSAM_T" || -
 fi
 
 export ARCH CPU_MODEL CPU_CORES CPU_CACHE
+export SCHED_POLICY SCHED_PRIORITY CPU_AFFINITY CPU_GOVERNOR
 
 python3 - <<PY
 import os
@@ -132,6 +164,10 @@ arch = os.environ.get("ARCH", "?")
 cpu_model = os.environ.get("CPU_MODEL", "?")
 cpu_cores = os.environ.get("CPU_CORES", "?")
 cpu_cache = os.environ.get("CPU_CACHE", "?")
+sched_policy = os.environ.get("SCHED_POLICY", "?")
+sched_priority = os.environ.get("SCHED_PRIORITY", "?")
+cpu_affinity = os.environ.get("CPU_AFFINITY", "?")
+cpu_governor = os.environ.get("CPU_GOVERNOR", "?")
 
 def make_table(headers, rows):
     widths = [
@@ -180,7 +216,15 @@ for name, total, iters, per_iter, rate in results:
         ]
     )
 
-print(f"[bench] cpu: {cpu_model} | cores: {cpu_cores} | cache: {cpu_cache} | arch: {arch}")
-print("[bench] summary:")
+print("\n========== Summary ==========\n")
+print(f"[bench] arch           : {arch}")
+print(f"[bench] cpu model      : {cpu_model}")
+print(f"[bench] cpu cores      : {cpu_cores}")
+print(f"[bench] cpu cache      : {cpu_cache}")
+print(f"[bench] sched policy   : {sched_policy}")
+print(f"[bench] sched priority : {sched_priority}")
+print(f"[bench] cpu affinity   : {cpu_affinity}")
+print(f"[bench] cpu governor   : {cpu_governor}")
+print("\n[bench] summary:")
 print(make_table(headers, rows))
 PY
