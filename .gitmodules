@@ -6,4 +6,4 @@
 	url = https://github.com/ceres-solver/ceres-solver.git
 [submodule "gtsam"]
 	path = gtsam
-	url = https://github.com/borglab/gtsam.git
+	url = https://github.com/dvorak0/gtsam.git
