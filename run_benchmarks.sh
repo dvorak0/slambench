@@ -105,6 +105,14 @@ run_one_dataset() {
     msckf_log="$ROOT_DIR/msckf.log"
   fi
 
+  local gtsam_base gtsam_bal_log gtsam_smart_log
+  gtsam_base="${gtsam_log%.log}"
+  if [[ "$gtsam_base" == "$gtsam_log" ]]; then
+    gtsam_base="$gtsam_log"
+  fi
+  gtsam_bal_log="${gtsam_base}_bal.log"
+  gtsam_smart_log="${gtsam_base}_smartfactor.log"
+
   local msckf_base msckf_rr_log msckf_rc_log msckf_cr_log msckf_cc_log msckf_openblas_log
   msckf_base="${msckf_log%.log}"
   if [[ "$msckf_base" == "$msckf_log" ]]; then
@@ -131,20 +139,22 @@ run_one_dataset() {
   print_section "Run MSCKF [$dataset]"
   bash "$ROOT_DIR/run_msckf.sh" "$dataset" "$msckf_log"
 
-  local sym_t ceres_t ceres_sparse_t gtsam_t
-  local sym_iters ceres_iters ceres_sparse_iters gtsam_iters
+  local sym_t ceres_t ceres_sparse_t gtsam_bal_t gtsam_smart_t
+  local sym_iters ceres_iters ceres_sparse_iters gtsam_bal_iters gtsam_smart_iters
   local msckf_rr_t msckf_rc_t msckf_cr_t msckf_cc_t msckf_openblas_t
   local msckf_rr_iters msckf_rc_iters msckf_cr_iters msckf_cc_iters msckf_openblas_iters
 
   sym_t=$(parse_symforce_total "$sym_log")
   ceres_t=$(parse_ceres_total "$ceres_log")
   ceres_sparse_t=$(parse_ceres_total "$ceres_sparse_log")
-  gtsam_t=$(parse_gtsam_total "$gtsam_log")
+  gtsam_bal_t=$(parse_gtsam_total "$gtsam_bal_log")
+  gtsam_smart_t=$(parse_gtsam_total "$gtsam_smart_log")
 
   sym_iters=$(parse_symforce_iters "$sym_log")
   ceres_iters=$(parse_ceres_iters "$ceres_log")
   ceres_sparse_iters=$(parse_ceres_iters "$ceres_sparse_log")
-  gtsam_iters=$(parse_gtsam_iters "$gtsam_log")
+  gtsam_bal_iters=$(parse_gtsam_iters "$gtsam_bal_log")
+  gtsam_smart_iters=$(parse_gtsam_iters "$gtsam_smart_log")
 
   msckf_rr_t=$(parse_msckf_total "$msckf_rr_log")
   msckf_rc_t=$(parse_msckf_total "$msckf_rc_log")
@@ -162,7 +172,7 @@ run_one_dataset() {
     msckf_openblas_iters=""
   fi
 
-  if [[ -z "$sym_t" || -z "$ceres_t" || -z "$ceres_sparse_t" || -z "$gtsam_t" || -z "$msckf_rr_t" || -z "$msckf_rc_t" || -z "$msckf_cr_t" || -z "$msckf_cc_t" || -z "$sym_iters" || -z "$ceres_iters" || -z "$ceres_sparse_iters" || -z "$gtsam_iters" || -z "$msckf_rr_iters" || -z "$msckf_rc_iters" || -z "$msckf_cr_iters" || -z "$msckf_cc_iters" || "$sym_iters" -eq 0 || "$ceres_iters" -eq 0 || "$ceres_sparse_iters" -eq 0 || "$gtsam_iters" -eq 0 || "$msckf_rr_iters" -eq 0 || "$msckf_rc_iters" -eq 0 || "$msckf_cr_iters" -eq 0 || "$msckf_cc_iters" -eq 0 ]]; then
+  if [[ -z "$sym_t" || -z "$ceres_t" || -z "$ceres_sparse_t" || -z "$gtsam_bal_t" || -z "$gtsam_smart_t" || -z "$msckf_rr_t" || -z "$msckf_rc_t" || -z "$msckf_cr_t" || -z "$msckf_cc_t" || -z "$sym_iters" || -z "$ceres_iters" || -z "$ceres_sparse_iters" || -z "$gtsam_bal_iters" || -z "$gtsam_smart_iters" || -z "$msckf_rr_iters" || -z "$msckf_rc_iters" || -z "$msckf_cr_iters" || -z "$msckf_cc_iters" || "$sym_iters" -eq 0 || "$ceres_iters" -eq 0 || "$ceres_sparse_iters" -eq 0 || "$gtsam_bal_iters" -eq 0 || "$gtsam_smart_iters" -eq 0 || "$msckf_rr_iters" -eq 0 || "$msckf_rc_iters" -eq 0 || "$msckf_cr_iters" -eq 0 || "$msckf_cc_iters" -eq 0 ]]; then
     echo "[bench] failed to parse totals/iters for dataset '$dataset'"
     exit 1
   fi
@@ -176,7 +186,8 @@ import os
 sym_total = float("$sym_t")
 ceres_total = float("$ceres_t")
 ceres_sparse_total = float("$ceres_sparse_t")
-gtsam_total = float("$gtsam_t")
+gtsam_bal_total = float("$gtsam_bal_t")
+gtsam_smart_total = float("$gtsam_smart_t")
 msckf_rr_total = float("$msckf_rr_t")
 msckf_rc_total = float("$msckf_rc_t")
 msckf_cr_total = float("$msckf_cr_t")
@@ -185,7 +196,8 @@ msckf_openblas_total_str = "$msckf_openblas_t"
 sym_iters = int("$sym_iters")
 ceres_iters = int("$ceres_iters")
 ceres_sparse_iters = int("$ceres_sparse_iters")
-gtsam_iters = int("$gtsam_iters")
+gtsam_bal_iters = int("$gtsam_bal_iters")
+gtsam_smart_iters = int("$gtsam_smart_iters")
 msckf_rr_iters = int("$msckf_rr_iters")
 msckf_rc_iters = int("$msckf_rc_iters")
 msckf_cr_iters = int("$msckf_cr_iters")
@@ -215,7 +227,8 @@ results = [
     ("symforce", sym_total, sym_iters),
     ("ceres_dense", ceres_total, ceres_iters),
     ("ceres_sparse", ceres_sparse_total, ceres_sparse_iters),
-    ("gtsam", gtsam_total, gtsam_iters),
+    ("gtsam_bal", gtsam_bal_total, gtsam_bal_iters),
+    ("gtsam_smartfactor", gtsam_smart_total, gtsam_smart_iters),
     ("msckf_rr", msckf_rr_total, msckf_rr_iters),
     ("msckf_rc", msckf_rc_total, msckf_rc_iters),
     ("msckf_cr", msckf_cr_total, msckf_cr_iters),
