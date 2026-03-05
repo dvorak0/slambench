@@ -6,11 +6,22 @@
 #include <string.h>
 #include <time.h>
 
+#if defined(MSCKF_STORAGE_COL_MAJOR)
 #if defined(MSCKF_USE_COL_QR)
-#define MSCKF_QR_SOLVER qr_solve_givens_col_order
+#define MSCKF_GLOBAL_QR_SOLVER qr_solve_givens_cm_col_order
 #else
-#define MSCKF_QR_SOLVER qr_solve_givens_row_order
+#define MSCKF_GLOBAL_QR_SOLVER qr_solve_givens_cm_row_order
 #endif
+#else
+#if defined(MSCKF_USE_COL_QR)
+#define MSCKF_GLOBAL_QR_SOLVER qr_solve_givens_rm_col_order
+#else
+#define MSCKF_GLOBAL_QR_SOLVER qr_solve_givens_rm_row_order
+#endif
+#endif
+
+// Keep point-level tiny solves on row-major storage.
+#define MSCKF_POINT_QR_SOLVER qr_solve_givens_row_order
 
 typedef struct {
   double aa[3]; // angle-axis
@@ -282,6 +293,16 @@ int main(int argc, char **argv) {
   int global_camera_solve_calls = 0;
   int max_iters = 6;
   int valid_points = 0;
+#if defined(MSCKF_STORAGE_COL_MAJOR)
+  const char *global_storage_mode = "col-major";
+#else
+  const char *global_storage_mode = "row-major";
+#endif
+#if defined(MSCKF_USE_COL_QR)
+  const char *global_elim_mode = "col-order";
+#else
+  const char *global_elim_mode = "row-order";
+#endif
 
   // Build point -> observation index lists
   PointObs *point_obs = calloc(np, sizeof(PointObs));
@@ -314,7 +335,7 @@ int main(int argc, char **argv) {
       if (c >= 2) total_rows += (2 * c - 3);
     }
     int rows_with_reg = total_rows + state_dim; // per-state regularization (includes anchor)
-    double *Hred = calloc((size_t)rows_with_reg * state_dim, sizeof(double)); // row-major
+    double *Hred = calloc((size_t)rows_with_reg * state_dim, sizeof(double));
     double *bred = calloc((size_t)rows_with_reg, sizeof(double));
     int row_cursor = 0;
     valid_points = 0;
@@ -376,7 +397,11 @@ int main(int argc, char **argv) {
       for (int rr = 0; rr < keep_rows; ++rr) {
         int dest_row = row_cursor + rr;
         for (int c = 0; c < state_dim; ++c) {
+#if defined(MSCKF_STORAGE_COL_MAJOR)
+          Hred[c * rows_with_reg + dest_row] = Hx[(3 + rr) * state_dim + c];
+#else
           Hred[dest_row * state_dim + c] = Hx[(3 + rr) * state_dim + c];
+#endif
         }
         bred[dest_row] = r[3 + rr];
       }
@@ -390,7 +415,11 @@ int main(int argc, char **argv) {
     for (int j = 0; j < state_dim; ++j) {
       double lam = (j < 6) ? anchor_lambda : reg_lambda;
       int rrow = row_cursor + j;
+#if defined(MSCKF_STORAGE_COL_MAJOR)
+      Hred[j * rows_with_reg + rrow] = sqrt(lam);
+#else
       Hred[rrow * state_dim + j] = sqrt(lam);
+#endif
       bred[rrow] = 0.0;
     }
     row_cursor += state_dim;
@@ -403,7 +432,7 @@ int main(int argc, char **argv) {
     }
 
     double t_cam_solve0 = wall_seconds();
-    int qr_status = MSCKF_QR_SOLVER(Hred, row_cursor, state_dim, bred);
+    int qr_status = MSCKF_GLOBAL_QR_SOLVER(Hred, row_cursor, state_dim, bred);
     global_camera_solve_time += wall_seconds() - t_cam_solve0;
     global_camera_solve_calls++;
     if (qr_status != 0) {
@@ -451,7 +480,7 @@ int main(int argc, char **argv) {
       jacobian_eval_calls++;
 
       double t_backsolve0 = wall_seconds();
-      int qr_point_status = MSCKF_QR_SOLVER(Hf, m, 3, rhs);
+      int qr_point_status = MSCKF_POINT_QR_SOLVER(Hf, m, 3, rhs);
       point_backsolve_time += wall_seconds() - t_backsolve0;
       point_backsolve_calls++;
       if (qr_point_status == 0) {
@@ -543,6 +572,8 @@ int main(int argc, char **argv) {
 
   printf("points_used: %d\n", valid_points);
   printf("iterations: %d\n", max_iters);
+  printf("global_qr_storage: %s\n", global_storage_mode);
+  printf("global_qr_order: %s\n", global_elim_mode);
   printf("Residual only evaluation: %.6f s (%d calls)\n", residual_eval_time, residual_eval_calls);
   printf("Jacobian evaluation: %.6f s (%d calls)\n", jacobian_eval_time, jacobian_eval_calls);
   printf("Point elimination: %.6f s (%d calls)\n", point_elim_time, point_elim_calls);

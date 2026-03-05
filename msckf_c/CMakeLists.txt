@@ -20,3 +20,19 @@ target_compile_definitions(msckf_runner_row PRIVATE MSCKF_USE_ROW_QR=1)
 add_executable(msckf_runner_col msckf.c)
 target_link_libraries(msckf_runner_col PRIVATE msckf_linalg m)
 target_compile_definitions(msckf_runner_col PRIVATE MSCKF_USE_COL_QR=1)
+
+add_executable(msckf_runner_rr msckf.c)
+target_link_libraries(msckf_runner_rr PRIVATE msckf_linalg m)
+target_compile_definitions(msckf_runner_rr PRIVATE MSCKF_USE_ROW_QR=1)
+
+add_executable(msckf_runner_rc msckf.c)
+target_link_libraries(msckf_runner_rc PRIVATE msckf_linalg m)
+target_compile_definitions(msckf_runner_rc PRIVATE MSCKF_USE_COL_QR=1)
+
+add_executable(msckf_runner_cr msckf.c)
+target_link_libraries(msckf_runner_cr PRIVATE msckf_linalg m)
+target_compile_definitions(msckf_runner_cr PRIVATE MSCKF_STORAGE_COL_MAJOR=1 MSCKF_USE_ROW_QR=1)
+
+add_executable(msckf_runner_cc msckf.c)
+target_link_libraries(msckf_runner_cc PRIVATE msckf_linalg m)
+target_compile_definitions(msckf_runner_cc PRIVATE MSCKF_STORAGE_COL_MAJOR=1 MSCKF_USE_COL_QR=1)

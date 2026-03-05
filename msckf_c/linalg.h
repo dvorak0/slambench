@@ -31,4 +31,10 @@ int qr_solve_givens_row_order(double *A, int m, int n, double *b);
 int qr_solve_givens_col_order(double *A, int m, int n, double *b);
 int qr_solve_givens(double *A, int m, int n, double *b);
 
+/* Explicit storage/elimination variants for benchmarking. */
+int qr_solve_givens_rm_row_order(double *A, int m, int n, double *b);
+int qr_solve_givens_rm_col_order(double *A, int m, int n, double *b);
+int qr_solve_givens_cm_row_order(double *A, int m, int n, double *b);
+int qr_solve_givens_cm_col_order(double *A, int m, int n, double *b);
+
 #endif
