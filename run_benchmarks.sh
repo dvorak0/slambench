@@ -44,6 +44,30 @@ parse_symforce_iters() {
   echo "${count:-0}"
 }
 
+parse_symforce_initial_cost() {
+  local log="$1"
+  awk -F'error prev/linear/new: ' '
+    /error prev\/linear\/new:/ {
+      split($2, a, ",");
+      gsub(/ /, "", a[1]);
+      split(a[1], b, "/");
+      print b[1];
+      exit
+    }' "$log"
+}
+
+parse_symforce_final_cost() {
+  local log="$1"
+  awk -F'error prev/linear/new: ' '
+    /error prev\/linear\/new:/ {
+      split($2, a, ",");
+      gsub(/ /, "", a[1]);
+      split(a[1], b, "/");
+      v=b[3];
+    }
+    END {print v}' "$log"
+}
+
 parse_ceres_total() {
   local log="$1"
   awk '/^Total[[:space:]]/ {print $2}' "$log" | head -n1
@@ -52,6 +76,16 @@ parse_ceres_total() {
 parse_ceres_iters() {
   local log="$1"
   awk '/^[[:space:]]*[0-9]+[[:space:]]/ {print}' "$log" | wc -l
+}
+
+parse_ceres_initial_cost() {
+  local log="$1"
+  awk '/^Initial[[:space:]]/ {print $2}' "$log" | head -n1
+}
+
+parse_ceres_final_cost() {
+  local log="$1"
+  awk '/^Final[[:space:]]/ {print $2}' "$log" | head -n1
 }
 
 parse_gtsam_total() {
@@ -70,6 +104,16 @@ parse_gtsam_iters() {
   echo 1
 }
 
+parse_gtsam_initial_cost() {
+  local log="$1"
+  awk '/^Initial error:/ {print $3}' "$log" | head -n1
+}
+
+parse_gtsam_final_cost() {
+  local log="$1"
+  awk '/^final error:/ {print $3}' "$log" | head -n1
+}
+
 parse_msckf_total() {
   local log="$1"
   awk '/^TIME[[:space:]]/ {print $2}' "$log" | head -n1
@@ -78,6 +122,22 @@ parse_msckf_total() {
 parse_msckf_iters() {
   local log="$1"
   awk '/^iterations:/ {print $2}' "$log" | head -n1
+}
+
+parse_msckf_initial_cost() {
+  local log="$1"
+  awk '/^iter 0 loss/ {print $4; exit}' "$log"
+}
+
+parse_msckf_final_cost() {
+  local log="$1"
+  local v
+  v=$(awk -F'loss=' '/step alpha=/ {print $2}' "$log" | tail -n1)
+  if [[ -n "${v:-}" ]]; then
+    echo "$v"
+    return
+  fi
+  awk '/^iter [0-9]+ loss/ {v=$4} END {print v}' "$log"
 }
 
 run_one_dataset() {
@@ -143,6 +203,10 @@ run_one_dataset() {
   local sym_iters ceres_iters ceres_sparse_iters gtsam_bal_iters gtsam_smart_iters
   local msckf_rr_t msckf_rc_t msckf_cr_t msckf_cc_t msckf_openblas_t
   local msckf_rr_iters msckf_rc_iters msckf_cr_iters msckf_cc_iters msckf_openblas_iters
+  local sym_ci sym_cf ceres_ci ceres_cf ceres_sparse_ci ceres_sparse_cf
+  local gtsam_bal_ci gtsam_bal_cf gtsam_smart_ci gtsam_smart_cf
+  local msckf_rr_ci msckf_rr_cf msckf_rc_ci msckf_rc_cf msckf_cr_ci msckf_cr_cf msckf_cc_ci msckf_cc_cf
+  local msckf_openblas_ci msckf_openblas_cf
 
   sym_t=$(parse_symforce_total "$sym_log")
   ceres_t=$(parse_ceres_total "$ceres_log")
@@ -156,6 +220,17 @@ run_one_dataset() {
   gtsam_bal_iters=$(parse_gtsam_iters "$gtsam_bal_log")
   gtsam_smart_iters=$(parse_gtsam_iters "$gtsam_smart_log")
 
+  sym_ci=$(parse_symforce_initial_cost "$sym_log")
+  sym_cf=$(parse_symforce_final_cost "$sym_log")
+  ceres_ci=$(parse_ceres_initial_cost "$ceres_log")
+  ceres_cf=$(parse_ceres_final_cost "$ceres_log")
+  ceres_sparse_ci=$(parse_ceres_initial_cost "$ceres_sparse_log")
+  ceres_sparse_cf=$(parse_ceres_final_cost "$ceres_sparse_log")
+  gtsam_bal_ci=$(parse_gtsam_initial_cost "$gtsam_bal_log")
+  gtsam_bal_cf=$(parse_gtsam_final_cost "$gtsam_bal_log")
+  gtsam_smart_ci=$(parse_gtsam_initial_cost "$gtsam_smart_log")
+  gtsam_smart_cf=$(parse_gtsam_final_cost "$gtsam_smart_log")
+
   msckf_rr_t=$(parse_msckf_total "$msckf_rr_log")
   msckf_rc_t=$(parse_msckf_total "$msckf_rc_log")
   msckf_cr_t=$(parse_msckf_total "$msckf_cr_log")
@@ -164,12 +239,24 @@ run_one_dataset() {
   msckf_rc_iters=$(parse_msckf_iters "$msckf_rc_log")
   msckf_cr_iters=$(parse_msckf_iters "$msckf_cr_log")
   msckf_cc_iters=$(parse_msckf_iters "$msckf_cc_log")
+  msckf_rr_ci=$(parse_msckf_initial_cost "$msckf_rr_log")
+  msckf_rr_cf=$(parse_msckf_final_cost "$msckf_rr_log")
+  msckf_rc_ci=$(parse_msckf_initial_cost "$msckf_rc_log")
+  msckf_rc_cf=$(parse_msckf_final_cost "$msckf_rc_log")
+  msckf_cr_ci=$(parse_msckf_initial_cost "$msckf_cr_log")
+  msckf_cr_cf=$(parse_msckf_final_cost "$msckf_cr_log")
+  msckf_cc_ci=$(parse_msckf_initial_cost "$msckf_cc_log")
+  msckf_cc_cf=$(parse_msckf_final_cost "$msckf_cc_log")
   if [[ -f "$msckf_openblas_log" ]]; then
     msckf_openblas_t=$(parse_msckf_total "$msckf_openblas_log")
     msckf_openblas_iters=$(parse_msckf_iters "$msckf_openblas_log")
+    msckf_openblas_ci=$(parse_msckf_initial_cost "$msckf_openblas_log")
+    msckf_openblas_cf=$(parse_msckf_final_cost "$msckf_openblas_log")
   else
     msckf_openblas_t=""
     msckf_openblas_iters=""
+    msckf_openblas_ci=""
+    msckf_openblas_cf=""
   fi
 
   if [[ -z "$sym_t" || -z "$ceres_t" || -z "$ceres_sparse_t" || -z "$gtsam_bal_t" || -z "$gtsam_smart_t" || -z "$msckf_rr_t" || -z "$msckf_rc_t" || -z "$msckf_cr_t" || -z "$msckf_cc_t" || -z "$sym_iters" || -z "$ceres_iters" || -z "$ceres_sparse_iters" || -z "$gtsam_bal_iters" || -z "$gtsam_smart_iters" || -z "$msckf_rr_iters" || -z "$msckf_rc_iters" || -z "$msckf_cr_iters" || -z "$msckf_cc_iters" || "$sym_iters" -eq 0 || "$ceres_iters" -eq 0 || "$ceres_sparse_iters" -eq 0 || "$gtsam_bal_iters" -eq 0 || "$gtsam_smart_iters" -eq 0 || "$msckf_rr_iters" -eq 0 || "$msckf_rc_iters" -eq 0 || "$msckf_cr_iters" -eq 0 || "$msckf_cc_iters" -eq 0 ]]; then
@@ -203,6 +290,26 @@ msckf_rc_iters = int("$msckf_rc_iters")
 msckf_cr_iters = int("$msckf_cr_iters")
 msckf_cc_iters = int("$msckf_cc_iters")
 msckf_openblas_iters_str = "$msckf_openblas_iters"
+sym_ci_str = "$sym_ci"
+sym_cf_str = "$sym_cf"
+ceres_ci_str = "$ceres_ci"
+ceres_cf_str = "$ceres_cf"
+ceres_sparse_ci_str = "$ceres_sparse_ci"
+ceres_sparse_cf_str = "$ceres_sparse_cf"
+gtsam_bal_ci_str = "$gtsam_bal_ci"
+gtsam_bal_cf_str = "$gtsam_bal_cf"
+gtsam_smart_ci_str = "$gtsam_smart_ci"
+gtsam_smart_cf_str = "$gtsam_smart_cf"
+msckf_rr_ci_str = "$msckf_rr_ci"
+msckf_rr_cf_str = "$msckf_rr_cf"
+msckf_rc_ci_str = "$msckf_rc_ci"
+msckf_rc_cf_str = "$msckf_rc_cf"
+msckf_cr_ci_str = "$msckf_cr_ci"
+msckf_cr_cf_str = "$msckf_cr_cf"
+msckf_cc_ci_str = "$msckf_cc_ci"
+msckf_cc_cf_str = "$msckf_cc_cf"
+msckf_openblas_ci_str = "$msckf_openblas_ci"
+msckf_openblas_cf_str = "$msckf_openblas_cf"
 
 dataset_name = os.environ.get("DATASET_NAME", "?")
 arch = os.environ.get("ARCH", "?")
@@ -224,30 +331,32 @@ def make_table(headers, rows):
     return "\n".join([sep("-"), fmt_row(headers), sep("=")] + [fmt_row(r) for r in rows] + [sep("-")])
 
 results = [
-    ("symforce", sym_total, sym_iters),
-    ("ceres_dense", ceres_total, ceres_iters),
-    ("ceres_sparse", ceres_sparse_total, ceres_sparse_iters),
-    ("gtsam_bal", gtsam_bal_total, gtsam_bal_iters),
-    ("gtsam_smartfactor", gtsam_smart_total, gtsam_smart_iters),
-    ("msckf_rr", msckf_rr_total, msckf_rr_iters),
-    ("msckf_rc", msckf_rc_total, msckf_rc_iters),
-    ("msckf_cr", msckf_cr_total, msckf_cr_iters),
-    ("msckf_cc", msckf_cc_total, msckf_cc_iters),
+    ("symforce", sym_total, sym_iters, sym_ci_str, sym_cf_str),
+    ("ceres_dense", ceres_total, ceres_iters, ceres_ci_str, ceres_cf_str),
+    ("ceres_sparse", ceres_sparse_total, ceres_sparse_iters, ceres_sparse_ci_str, ceres_sparse_cf_str),
+    ("gtsam_bal", gtsam_bal_total, gtsam_bal_iters, gtsam_bal_ci_str, gtsam_bal_cf_str),
+    ("gtsam_smartfactor", gtsam_smart_total, gtsam_smart_iters, gtsam_smart_ci_str, gtsam_smart_cf_str),
+    ("msckf_rr", msckf_rr_total, msckf_rr_iters, msckf_rr_ci_str, msckf_rr_cf_str),
+    ("msckf_rc", msckf_rc_total, msckf_rc_iters, msckf_rc_ci_str, msckf_rc_cf_str),
+    ("msckf_cr", msckf_cr_total, msckf_cr_iters, msckf_cr_ci_str, msckf_cr_cf_str),
+    ("msckf_cc", msckf_cc_total, msckf_cc_iters, msckf_cc_ci_str, msckf_cc_cf_str),
 ]
 if msckf_openblas_total_str and msckf_openblas_iters_str:
-    results.append(("msckf_openblas", float(msckf_openblas_total_str), int(msckf_openblas_iters_str)))
+    results.append(("msckf_openblas", float(msckf_openblas_total_str), int(msckf_openblas_iters_str), msckf_openblas_ci_str, msckf_openblas_cf_str))
 else:
-    results.append(("msckf_openblas", None, None))
+    results.append(("msckf_openblas", None, None, "", ""))
 base_per_iter = ceres_total / ceres_iters if ceres_iters > 0 else None
 rows = []
-for name, total, iters in results:
+for name, total, iters, cost_i_str, cost_f_str in results:
     if total is None or iters is None:
-        rows.append([name, "n/a", "n/a", "n/a", "n/a", "n/a"])
+        rows.append([name, "n/a", "n/a", "n/a", "n/a", "n/a", "n/a", "n/a"])
         continue
     per_iter = total / iters if iters > 0 else float("nan")
     rate = iters / total if total > 0 else float("nan")
     ratio = (per_iter / base_per_iter) if (base_per_iter and base_per_iter > 0) else float("inf")
-    rows.append([name, f"{total:.3f}", f"{iters:d}", f"{per_iter:.3f}", f"{rate:.2f}", f"{ratio:.3f}x" if base_per_iter and base_per_iter > 0 else "n/a"])
+    cost_i = f"{float(cost_i_str):.3e}" if cost_i_str else "n/a"
+    cost_f = f"{float(cost_f_str):.3e}" if cost_f_str else "n/a"
+    rows.append([name, f"{total:.3f}", f"{iters:d}", f"{per_iter:.3f}", f"{rate:.2f}", f"{ratio:.3f}x" if base_per_iter and base_per_iter > 0 else "n/a", cost_i, cost_f])
 
 print("\n========== Summary ==========\n")
 print(f"[bench] dataset        : {dataset_name}")
@@ -259,8 +368,8 @@ print(f"[bench] sched policy   : {sched_policy}")
 print(f"[bench] sched priority : {sched_priority}")
 print(f"[bench] cpu affinity   : {cpu_affinity}")
 print(f"[bench] cpu governor   : {cpu_governor}")
-print("\n[bench] summary:")
-print(make_table(["engine", "total (s)", "iters", "per_iter (s)", "iter/s", "per_iter ratio"], rows))
+print(f"\n[bench] summary [{dataset_name}]:")
+print(make_table(["engine", "total (s)", "iters", "per_iter (s)", "iter/s", "per_iter ratio", "initial cost", "final cost"], rows))
 PY
 }
 
