@@ -77,7 +77,9 @@ if [[ "$MODE" == "workspace" ]]; then
 
   if [[ -x "$WORKSPACE_BINARY_OPENBLAS" ]]; then
     echo "[msckf] running openblas: col-major storage + OpenBLAS dgels..."
-    "$WORKSPACE_BINARY_OPENBLAS" "$DATASET_PATH" > "$LOG_OPENBLAS" 2>&1
+    echo "[msckf] openblas threads: OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 GOTO_NUM_THREADS=1"
+    OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 GOTO_NUM_THREADS=1 \
+      "$WORKSPACE_BINARY_OPENBLAS" "$DATASET_PATH" > "$LOG_OPENBLAS" 2>&1
   fi
 
   cp "$LOG_RR" "$LOG_FILE"
