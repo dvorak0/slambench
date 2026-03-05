@@ -6,10 +6,10 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Symforce is installed and built in the image at /opt/slambench/symforce
 SYMFORCE_DIR="/opt/slambench/symforce"
 BUILD_DIR="$SYMFORCE_DIR/build"
-DATASET="problem-16-22106-pre.txt"
+DATASET="${1:-problem-16-22106-pre.txt}"
 # Expect dataset to be checked into the repo under data/dubrovnik/
 DATASET_PATH="$ROOT_DIR/data/dubrovnik/$DATASET"
-LOG_FILE="$ROOT_DIR/symforce.log"
+LOG_FILE="${2:-$ROOT_DIR/symforce.log}"
 
 echo "[symforce] root: $ROOT_DIR"
 echo "[symforce] dataset: $DATASET_PATH"

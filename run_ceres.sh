@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DATASET="problem-16-22106-pre.txt"
+DATASET="${3:-problem-16-22106-pre.txt}"
 DATASET_PATH="$ROOT_DIR/data/dubrovnik/$DATASET"
 BINARY="/opt/slambench/ceres-solver/build/bin/bundle_adjuster"
 LINEAR_SOLVER="${1:-dense_schur}"

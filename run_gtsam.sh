@@ -2,10 +2,10 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DATASET="problem-16-22106-pre.txt"
+DATASET="${1:-problem-16-22106-pre.txt}"
 DATASET_PATH="$ROOT_DIR/data/dubrovnik/$DATASET"
 BINARY="/opt/slambench/gtsam/build/examples/SFMExample_bal"
-LOG_FILE="$ROOT_DIR/gtsam.log"
+LOG_FILE="${2:-$ROOT_DIR/gtsam.log}"
 
 echo "[gtsam] root: $ROOT_DIR"
 

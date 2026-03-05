@@ -36,3 +36,10 @@ target_compile_definitions(msckf_runner_cr PRIVATE MSCKF_STORAGE_COL_MAJOR=1 MSC
 add_executable(msckf_runner_cc msckf.c)
 target_link_libraries(msckf_runner_cc PRIVATE msckf_linalg m)
 target_compile_definitions(msckf_runner_cc PRIVATE MSCKF_STORAGE_COL_MAJOR=1 MSCKF_USE_COL_QR=1)
+
+find_library(OPENBLAS_LIB NAMES openblas)
+if(OPENBLAS_LIB)
+  add_executable(msckf_runner_openblas msckf.c)
+  target_link_libraries(msckf_runner_openblas PRIVATE msckf_linalg m ${OPENBLAS_LIB})
+  target_compile_definitions(msckf_runner_openblas PRIVATE MSCKF_STORAGE_COL_MAJOR=1 MSCKF_USE_LAPACK=1 MSCKF_USE_OPENBLAS=1)
+endif()

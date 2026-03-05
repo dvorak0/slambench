@@ -2,19 +2,25 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DATASET="problem-16-22106-pre.txt"
+DATASET="${1:-problem-16-22106-pre.txt}"
 DATASET_PATH="$ROOT_DIR/data/dubrovnik/$DATASET"
 BUILD_DIR="$ROOT_DIR/msckf_c/build"
 WORKSPACE_BINARY_RR="$BUILD_DIR/msckf_runner_rr"
 WORKSPACE_BINARY_RC="$BUILD_DIR/msckf_runner_rc"
 WORKSPACE_BINARY_CR="$BUILD_DIR/msckf_runner_cr"
 WORKSPACE_BINARY_CC="$BUILD_DIR/msckf_runner_cc"
+WORKSPACE_BINARY_OPENBLAS="$BUILD_DIR/msckf_runner_openblas"
 IMAGE_BINARY="/opt/slambench/msckf_c/build/msckf_runner"
-LOG_FILE="$ROOT_DIR/msckf.log"
-LOG_RR="$ROOT_DIR/msckf_rr.log"
-LOG_RC="$ROOT_DIR/msckf_rc.log"
-LOG_CR="$ROOT_DIR/msckf_cr.log"
-LOG_CC="$ROOT_DIR/msckf_cc.log"
+LOG_FILE="${2:-$ROOT_DIR/msckf.log}"
+LOG_BASE="${LOG_FILE%.log}"
+if [[ "$LOG_BASE" == "$LOG_FILE" ]]; then
+  LOG_BASE="$LOG_FILE"
+fi
+LOG_RR="${LOG_BASE}_rr.log"
+LOG_RC="${LOG_BASE}_rc.log"
+LOG_CR="${LOG_BASE}_cr.log"
+LOG_CC="${LOG_BASE}_cc.log"
+LOG_OPENBLAS="${LOG_BASE}_openblas.log"
 
 echo "[msckf] root: $ROOT_DIR"
 
@@ -69,16 +75,24 @@ if [[ "$MODE" == "workspace" ]]; then
   echo "[msckf] running cc: col-major storage + col-order elimination..."
   "$WORKSPACE_BINARY_CC" "$DATASET_PATH" > "$LOG_CC" 2>&1
 
+  if [[ -x "$WORKSPACE_BINARY_OPENBLAS" ]]; then
+    echo "[msckf] running openblas: col-major storage + OpenBLAS dgels..."
+    "$WORKSPACE_BINARY_OPENBLAS" "$DATASET_PATH" > "$LOG_OPENBLAS" 2>&1
+  fi
+
   cp "$LOG_RR" "$LOG_FILE"
 
   echo
-  echo "[msckf] 4-way comparison (seconds):"
+  echo "[msckf] layout/order/openblas comparison (seconds):"
   printf "%-26s %12s %12s\n" "mode" "TIME(s)" "GlobalQR(s)"
   printf "%-26s %12s %12s\n" "--------------------------" "------------" "------------"
   print_result "rr (row-major,row-order)" "$LOG_RR"
   print_result "rc (row-major,col-order)" "$LOG_RC"
   print_result "cr (col-major,row-order)" "$LOG_CR"
   print_result "cc (col-major,col-order)" "$LOG_CC"
+  if [[ -f "$LOG_OPENBLAS" ]]; then
+    print_result "openblas (col-major,dgels)" "$LOG_OPENBLAS"
+  fi
 
   echo
   echo "[msckf] logs:"
@@ -86,11 +100,16 @@ if [[ "$MODE" == "workspace" ]]; then
   echo "  rc -> $LOG_RC"
   echo "  cr -> $LOG_CR"
   echo "  cc -> $LOG_CC"
+  if [[ -f "$LOG_OPENBLAS" ]]; then
+    echo "  openblas -> $LOG_OPENBLAS"
+  else
+    echo "  openblas -> not built (OpenBLAS not found by CMake)"
+  fi
   echo "  default -> $LOG_FILE (rr, for compatibility)"
 else
   CMD="$IMAGE_BINARY $DATASET_PATH"
   echo "[msckf] command: $CMD"
   "$IMAGE_BINARY" "$DATASET_PATH" > "$LOG_FILE" 2>&1
   echo "[msckf] done. Log: $LOG_FILE"
-  echo "[msckf] note: image mode only has one runner, 4-way comparison unavailable."
+  echo "[msckf] note: image mode only has one runner, comparison unavailable."
 fi

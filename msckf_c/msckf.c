@@ -6,6 +6,11 @@
 #include <string.h>
 #include <time.h>
 
+#if defined(MSCKF_USE_LAPACK)
+extern void dgels_(char *trans, int *m, int *n, int *nrhs, double *a, int *lda, double *b, int *ldb,
+                   double *work, int *lwork, int *info);
+#endif
+
 #if defined(MSCKF_STORAGE_COL_MAJOR)
 #if defined(MSCKF_USE_COL_QR)
 #define MSCKF_GLOBAL_QR_SOLVER qr_solve_givens_cm_col_order
@@ -22,6 +27,27 @@
 
 // Keep point-level tiny solves on row-major storage.
 #define MSCKF_POINT_QR_SOLVER qr_solve_givens_row_order
+
+#if defined(MSCKF_USE_LAPACK)
+static int solve_global_lapack_dgels(double *A, int m, int n, double *b) {
+  int nrhs = 1;
+  int lda = m;
+  int ldb = m > n ? m : n;
+  int info = 0;
+  int lwork = -1;
+  double wkopt = 0.0;
+  char trans = 'N';
+  dgels_(&trans, &m, &n, &nrhs, A, &lda, b, &ldb, &wkopt, &lwork, &info);
+  if (info != 0) return -1;
+  lwork = (int)wkopt;
+  if (lwork < 1) lwork = 1;
+  double *work = malloc((size_t)lwork * sizeof(double));
+  if (!work) return -1;
+  dgels_(&trans, &m, &n, &nrhs, A, &lda, b, &ldb, work, &lwork, &info);
+  free(work);
+  return info == 0 ? 0 : -1;
+}
+#endif
 
 typedef struct {
   double aa[3]; // angle-axis
@@ -207,6 +233,7 @@ static int load_bal(const char *path, Camera **cams_out, Point **pts_out, Observ
     }
   }
   fclose(f);
+
   *cams_out = cams;
   *pts_out = pts;
   *obs_out = obs;
@@ -302,6 +329,15 @@ int main(int argc, char **argv) {
   const char *global_elim_mode = "col-order";
 #else
   const char *global_elim_mode = "row-order";
+#endif
+#if defined(MSCKF_USE_LAPACK)
+#if defined(MSCKF_USE_OPENBLAS)
+  const char *global_solver_mode = "openblas_dgels";
+#else
+  const char *global_solver_mode = "lapack_dgels";
+#endif
+#else
+  const char *global_solver_mode = "givens";
 #endif
 
   // Build point -> observation index lists
@@ -432,7 +468,11 @@ int main(int argc, char **argv) {
     }
 
     double t_cam_solve0 = wall_seconds();
+#if defined(MSCKF_USE_LAPACK)
+    int qr_status = solve_global_lapack_dgels(Hred, row_cursor, state_dim, bred);
+#else
     int qr_status = MSCKF_GLOBAL_QR_SOLVER(Hred, row_cursor, state_dim, bred);
+#endif
     global_camera_solve_time += wall_seconds() - t_cam_solve0;
     global_camera_solve_calls++;
     if (qr_status != 0) {
@@ -571,7 +611,10 @@ int main(int argc, char **argv) {
   double total_time = wall_seconds() - total_start;
 
   printf("points_used: %d\n", valid_points);
+  printf("dataset_points: %d\n", np);
+  printf("dataset_observations: %d\n", no);
   printf("iterations: %d\n", max_iters);
+  printf("global_qr_solver: %s\n", global_solver_mode);
   printf("global_qr_storage: %s\n", global_storage_mode);
   printf("global_qr_order: %s\n", global_elim_mode);
   printf("Residual only evaluation: %.6f s (%d calls)\n", residual_eval_time, residual_eval_calls);

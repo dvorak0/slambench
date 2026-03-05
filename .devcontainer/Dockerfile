@@ -61,6 +61,12 @@ COPY run_symforce.sh run_ceres.sh run_gtsam.sh run_msckf.sh run_benchmarks.sh RE
 COPY data/ ./data/
 RUN chmod +x /workspace/run_*.sh
 
+# Install OpenBLAS late to preserve cache on heavy build layers.
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        libopenblas-dev && \
+    rm -rf /var/lib/apt/lists/*
+
 # Create a non-root user for devcontainer sessions
 ARG USERNAME=vscode
 ARG USER_UID=1000
