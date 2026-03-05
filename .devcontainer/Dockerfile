@@ -53,7 +53,7 @@ WORKDIR /opt/slambench/msckf_c
 COPY msckf_c/ /opt/slambench/msckf_c/
 RUN mkdir -p build && cd build && \
     cmake .. -DCMAKE_BUILD_TYPE=Release && \
-    make -j"$(nproc)" msckf_runner
+    make -j"$(nproc)" msckf_runner msckf_runner_rr msckf_runner_rc msckf_runner_cr msckf_runner_cc
 
 # Copy scripts/data into the image workspace
 WORKDIR /workspace
@@ -66,6 +66,12 @@ RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         libopenblas-dev && \
     rm -rf /var/lib/apt/lists/*
+
+# Reconfigure/rebuild MSCKF after OpenBLAS is installed so msckf_runner_openblas is generated.
+WORKDIR /opt/slambench/msckf_c
+RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && \
+    cmake --build build -j"$(nproc)" --target \
+      msckf_runner msckf_runner_rr msckf_runner_rc msckf_runner_cr msckf_runner_cc msckf_runner_openblas
 
 # Create a non-root user for devcontainer sessions
 ARG USERNAME=vscode
