@@ -7,7 +7,6 @@ RUN apt-get update && \
         build-essential cmake ninja-build libgmp-dev \
         libgoogle-glog-dev libgflags-dev libatlas-base-dev libsuitesparse-dev libeigen3-dev \
         libboost-all-dev libtbb-dev libabsl-dev \
-        libopencv-dev \
         git curl ca-certificates sudo && \
     rm -rf /var/lib/apt/lists/*
 
@@ -55,6 +54,12 @@ COPY msckf_c/ /opt/slambench/msckf_c/
 RUN mkdir -p build && cd build && \
     cmake .. -DCMAKE_BUILD_TYPE=Release && \
     make -j"$(nproc)" msckf_runner msckf_runner_rr msckf_runner_rc msckf_runner_cr msckf_runner_cc
+
+# Install OpenCV late so backend image layers stay cacheable when frontend changes
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        libopencv-dev && \
+    rm -rf /var/lib/apt/lists/*
 
 # Build frontend OpenCV benchmark
 WORKDIR /opt/slambench/frontend
