@@ -70,7 +70,7 @@ RUN mkdir -p build && cd build && \
 
 # Copy scripts/data into the image workspace
 WORKDIR /workspace
-COPY run_symforce.sh run_ceres.sh run_gtsam.sh run_msckf.sh run_benchmarks.sh run_frontend.sh README.md ./ 
+COPY run_symforce.sh run_ceres.sh run_gtsam.sh run_msckf.sh run_backend.sh run_benchmarks.sh run_frontend.sh README.md ./ 
 COPY data/ ./data/
 RUN chmod +x /workspace/run_*.sh
 
