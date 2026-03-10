@@ -7,6 +7,7 @@ RUN apt-get update && \
         build-essential cmake ninja-build libgmp-dev \
         libgoogle-glog-dev libgflags-dev libatlas-base-dev libsuitesparse-dev libeigen3-dev \
         libboost-all-dev libtbb-dev libabsl-dev \
+        libopencv-dev \
         git curl ca-certificates sudo && \
     rm -rf /var/lib/apt/lists/*
 
@@ -55,9 +56,16 @@ RUN mkdir -p build && cd build && \
     cmake .. -DCMAKE_BUILD_TYPE=Release && \
     make -j"$(nproc)" msckf_runner msckf_runner_rr msckf_runner_rc msckf_runner_cr msckf_runner_cc
 
+# Build frontend OpenCV benchmark
+WORKDIR /opt/slambench/frontend
+COPY frontend/ /opt/slambench/frontend/
+RUN mkdir -p build && cd build && \
+    cmake .. -DCMAKE_BUILD_TYPE=Release && \
+    make -j"$(nproc)"
+
 # Copy scripts/data into the image workspace
 WORKDIR /workspace
-COPY run_symforce.sh run_ceres.sh run_gtsam.sh run_msckf.sh run_benchmarks.sh README.md ./ 
+COPY run_symforce.sh run_ceres.sh run_gtsam.sh run_msckf.sh run_benchmarks.sh run_frontend.sh README.md ./ 
 COPY data/ ./data/
 RUN chmod +x /workspace/run_*.sh
 
