@@ -4,11 +4,26 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKSPACE_SRC_DIR="$ROOT_DIR/frontend"
 WORKSPACE_BUILD_DIR="$WORKSPACE_SRC_DIR/build"
-WORKSPACE_BINARY="$WORKSPACE_BUILD_DIR/frontend_harris_lk"
-IMAGE_BINARY="/opt/slambench/frontend/build/frontend_harris_lk"
-LOG_FILE="${1:-$ROOT_DIR/frontend.log}"
+MODE_NAME="${1:-harris_lk}"
+LOG_FILE="${2:-$ROOT_DIR/frontend.log}"
 FRAME0="$ROOT_DIR/data/euroc/frame0.png"
 FRAME1="$ROOT_DIR/data/euroc/frame1.png"
+
+case "$MODE_NAME" in
+  harris_lk)
+    WORKSPACE_BINARY="$WORKSPACE_BUILD_DIR/frontend_harris_lk"
+    IMAGE_BINARY="/opt/slambench/frontend/build/frontend_harris_lk"
+    ;;
+  orb_bf)
+    WORKSPACE_BINARY="$WORKSPACE_BUILD_DIR/frontend_orb_bf"
+    IMAGE_BINARY="/opt/slambench/frontend/build/frontend_orb_bf"
+    ;;
+  *)
+    echo "[frontend] unsupported mode: $MODE_NAME"
+    echo "[frontend] supported modes: harris_lk, orb_bf"
+    exit 1
+    ;;
+esac
 
 # Environment info
 ARCH="$(uname -m)"
@@ -37,10 +52,10 @@ if [[ -f "$WORKSPACE_SRC_DIR/CMakeLists.txt" ]]; then
   cmake -S "$WORKSPACE_SRC_DIR" -B "$WORKSPACE_BUILD_DIR" -DCMAKE_BUILD_TYPE=Release >/dev/null
   cmake --build "$WORKSPACE_BUILD_DIR" --config Release -j >/dev/null
   BINARY="$WORKSPACE_BINARY"
-  MODE="workspace"
+  SOURCE_MODE="workspace"
 elif [[ -x "$IMAGE_BINARY" ]]; then
   BINARY="$IMAGE_BINARY"
-  MODE="image"
+  SOURCE_MODE="image"
 else
   echo "[frontend] neither workspace source nor image binary found"
   echo "[frontend] expected one of:"
@@ -60,7 +75,8 @@ echo "[frontend] cpu affinity   : $CPU_AFFINITY"
 echo "[frontend] cpu governor   : $CPU_GOVERNOR"
 
 CMD="$BINARY $FRAME0 $FRAME1"
-echo "[frontend] mode: $MODE"
+echo "[frontend] frontend: $MODE_NAME"
+echo "[frontend] mode: $SOURCE_MODE"
 echo "[frontend] command: $CMD"
 $CMD | tee "$LOG_FILE"
 
@@ -93,30 +109,51 @@ with open(log_path, 'r') as f:
 
 # Parse key metrics
 image_size = re.search(r'image_size:\s*(\d+)x(\d+)', content)
-detected = re.search(r'detected_points:\s*(\d+)', content)
-tracked = re.search(r'tracked_points:\s*(\d+)', content)
-harris_ms = re.search(r'harris_ms:\s*([\d.]+)', content)
-lk_ms = re.search(r'lk_ms:\s*([\d.]+)', content)
 total_ms = re.search(r'total_ms:\s*([\d.]+)', content)
 
 rows = []
-if all([image_size, detected, tracked, harris_ms, lk_ms, total_ms]):
+if image_size and total_ms:
     w, h = image_size.group(1), image_size.group(2)
-    det = int(detected.group(1))
-    trk = int(tracked.group(1))
-    h_ms = float(harris_ms.group(1))
-    l_ms = float(lk_ms.group(1))
     tot = float(total_ms.group(1))
-    
-    success_rate = (trk / det * 100) if det > 0 else 0
     rows.append(["image_size", f"{w}x{h}"])
-    rows.append(["detected_points", f"{det}"])
-    rows.append(["tracked_points", f"{trk}"])
-    rows.append(["track_success_%", f"{success_rate:.1f}"])
-    rows.append(["harris_ms", f"{h_ms:.3f}"])
-    rows.append(["lk_ms", f"{l_ms:.3f}"])
-    rows.append(["total_ms", f"{tot:.3f}"])
-    rows.append(["fps", f"{1000.0/tot:.1f}"])
+
+    detected = re.search(r'detected_points:\s*(\d+)', content)
+    tracked = re.search(r'tracked_points:\s*(\d+)', content)
+    harris_ms = re.search(r'harris_ms:\s*([\d.]+)', content)
+    lk_ms = re.search(r'lk_ms:\s*([\d.]+)', content)
+    if all([detected, tracked, harris_ms, lk_ms]):
+        det = int(detected.group(1))
+        trk = int(tracked.group(1))
+        h_ms = float(harris_ms.group(1))
+        l_ms = float(lk_ms.group(1))
+        success_rate = (trk / det * 100) if det > 0 else 0
+        rows.append(["detected_points", f"{det}"])
+        rows.append(["tracked_points", f"{trk}"])
+        rows.append(["track_success_%", f"{success_rate:.1f}"])
+        rows.append(["harris_ms", f"{h_ms:.3f}"])
+        rows.append(["lk_ms", f"{l_ms:.3f}"])
+        rows.append(["total_ms", f"{tot:.3f}"])
+        rows.append(["fps", f"{1000.0/tot:.1f}"])
+    else:
+        keypoints0 = re.search(r'keypoints0:\s*(\d+)', content)
+        keypoints1 = re.search(r'keypoints1:\s*(\d+)', content)
+        descriptors0 = re.search(r'descriptors0:\s*(\d+)', content)
+        descriptors1 = re.search(r'descriptors1:\s*(\d+)', content)
+        matched_pairs = re.search(r'matched_pairs:\s*(\d+)', content)
+        orb_ms = re.search(r'orb_ms:\s*([\d.]+)', content)
+        match_ms = re.search(r'match_ms:\s*([\d.]+)', content)
+        if all([keypoints0, keypoints1, descriptors0, descriptors1, matched_pairs, orb_ms, match_ms]):
+            rows.append(["keypoints0", keypoints0.group(1)])
+            rows.append(["keypoints1", keypoints1.group(1)])
+            rows.append(["descriptors0", descriptors0.group(1)])
+            rows.append(["descriptors1", descriptors1.group(1)])
+            rows.append(["matched_pairs", matched_pairs.group(1)])
+            rows.append(["orb_ms", f"{float(orb_ms.group(1)):.3f}"])
+            rows.append(["match_ms", f"{float(match_ms.group(1)):.3f}"])
+            rows.append(["total_ms", f"{tot:.3f}"])
+            rows.append(["fps", f"{1000.0/tot:.1f}"])
+        else:
+            rows.append(["parse_error", "could not parse frontend mode"])
 else:
     rows.append(["parse_error", "could not parse log"])
 
