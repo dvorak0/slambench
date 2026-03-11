@@ -16,7 +16,7 @@ print_section() {
   echo
   echo "========== $title =========="
   echo
-
+}
 
 sanitize_name() {
   local s="$1"
@@ -24,12 +24,12 @@ sanitize_name() {
   s="${s// /_}"
   s="${s//=/_}"
   echo "$s"
-
+}
 
 parse_symforce_total() {
   local log="$1"
   awk -F'|' '/Optimizer<sym::Optimize>::Optimize/ {gsub(/ /,"",$3); print $3}' "$log" | head -n1
-
+}
 
 parse_symforce_iters() {
   local log="$1"
@@ -42,7 +42,7 @@ parse_symforce_iters() {
   local count
   count=$(grep -c 'LM<sym::Optimize> \[iter' "$log" || true)
   echo "${count:-0}"
-
+}
 
 parse_symforce_initial_cost() {
   local log="$1"
@@ -54,7 +54,7 @@ parse_symforce_initial_cost() {
       print b[1];
       exit
     }' "$log"
-
+}
 
 parse_symforce_final_cost() {
   local log="$1"
@@ -66,32 +66,32 @@ parse_symforce_final_cost() {
       v=b[3];
     }
     END {print v}' "$log"
-
+}
 
 parse_ceres_total() {
   local log="$1"
   awk '/^Total[[:space:]]/ {print $2}' "$log" | head -n1
-
+}
 
 parse_ceres_iters() {
   local log="$1"
   awk '/^[[:space:]]*[0-9]+[[:space:]]/ {print}' "$log" | wc -l
-
+}
 
 parse_ceres_initial_cost() {
   local log="$1"
   awk '/^Initial[[:space:]]/ {print $2}' "$log" | head -n1
-
+}
 
 parse_ceres_final_cost() {
   local log="$1"
   awk '/^Final[[:space:]]/ {print $2}' "$log" | head -n1
-
+}
 
 parse_gtsam_total() {
   local log="$1"
   awk '/^TIME[[:space:]]/ {print $2}' "$log" | head -n1
-
+}
 
 parse_gtsam_iters() {
   local log="$1"
@@ -102,32 +102,32 @@ parse_gtsam_iters() {
     return
   fi
   echo 1
-
+}
 
 parse_gtsam_initial_cost() {
   local log="$1"
   awk '/^Initial error:/ {print $3}' "$log" | head -n1
-
+}
 
 parse_gtsam_final_cost() {
   local log="$1"
   awk '/^final error:/ {print $3}' "$log" | head -n1
-
+}
 
 parse_msckf_total() {
   local log="$1"
   awk '/^TIME[[:space:]]/ {print $2}' "$log" | head -n1
-
+}
 
 parse_msckf_iters() {
   local log="$1"
   awk '/^iterations:/ {print $2}' "$log" | head -n1
-
+}
 
 parse_msckf_initial_cost() {
   local log="$1"
   awk '/^iter 0 loss/ {print $4; exit}' "$log"
-
+}
 
 parse_msckf_final_cost() {
   local log="$1"
@@ -138,7 +138,7 @@ parse_msckf_final_cost() {
     return
   fi
   awk '/^iter [0-9]+ loss/ {v=$4} END {print v}' "$log"
-
+}
 
 run_one_dataset() {
   local dataset="$1"
@@ -322,15 +322,13 @@ cpu_affinity = os.environ.get("CPU_AFFINITY", "?")
 cpu_governor = os.environ.get("CPU_GOVERNOR", "?")
 
 def make_table(headers, rows):
-    import prettytable
-    t = prettytable.PrettyTable()
-    t.field_names = headers
-    for row in rows:
-        t.add_row(row)
-    t.align = "r"
-    t.align[headers[0]] = "l"
-    return str(t)
-
+    widths = [max(len(str(headers[i])), *(len(str(r[i])) for r in rows)) for i in range(len(headers))]
+    align = ["<"] + [">"] * (len(headers) - 1)
+    def sep(char="-"):
+        return "+" + "+".join(char * (w + 2) for w in widths) + "+"
+    def fmt_row(row):
+        return "|" + "|".join(f" {str(row[i]):{align[i]}{widths[i]}} " for i in range(len(headers))) + "|"
+    return "\n".join([sep("-"), fmt_row(headers), sep("=")] + [fmt_row(r) for r in rows] + [sep("-")])
 
 results = [
     ("symforce", sym_total, sym_iters, sym_ci_str, sym_cf_str),
@@ -373,5 +371,37 @@ print(f"[bench] cpu governor   : {cpu_governor}")
 print(f"\n[bench] summary [{dataset_name}]:")
 print(make_table(["engine", "total (s)", "iters", "per_iter (s)", "iter/s", "per_iter ratio", "initial cost", "final cost"], rows))
 PY
-
 }
+
+DATASETS=("$@")
+if [[ ${#DATASETS[@]} -eq 0 ]]; then
+  DATASETS=(
+    "problem-16-22106-pre.txt"
+    "problem-16-22106-pre_stride=10.txt"
+    "problem-16-22106-pre_stride=20.txt"
+  )
+fi
+
+SCHED_POLICY="${SCHED_POLICY:-unknown}"
+SCHED_PRIORITY="${SCHED_PRIORITY:-unknown}"
+CPU_AFFINITY="${CPU_AFFINITY:-unknown}"
+CPU_GOVERNOR="${CPU_GOVERNOR:-unknown}"
+
+print_section "Environment"
+echo "[bench] arch           : $ARCH"
+echo "[bench] cpu model      : $CPU_MODEL"
+echo "[bench] cpu cores      : $CPU_CORES"
+echo "[bench] cpu cache      : $CPU_CACHE"
+echo "[bench] sched policy   : $SCHED_POLICY"
+echo "[bench] sched priority : $SCHED_PRIORITY"
+echo "[bench] cpu affinity   : $CPU_AFFINITY"
+echo "[bench] cpu governor   : $CPU_GOVERNOR"
+echo "[bench] datasets       : ${DATASETS[*]}"
+
+for dataset in "${DATASETS[@]}"; do
+  if [[ ${#DATASETS[@]} -gt 1 ]]; then
+    run_one_dataset "$dataset" "$(sanitize_name "$dataset")"
+  else
+    run_one_dataset "$dataset" ""
+  fi
+done
