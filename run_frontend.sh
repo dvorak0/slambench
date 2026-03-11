@@ -27,46 +27,47 @@ print_section() {
   echo
 }
 
-make_table() {
-  local headers="$1"
-  local rows="$2"
-  python3 - <<PY
-import sys
+if [[ ! -f "$FRAME0" || ! -f "$FRAME1" ]]; then
+  echo "[frontend] dataset not found: $FRAME0 / $FRAME1"
+  exit 1
+fi
 
-headers = "$headers".split('|')
-rows_str = """$rows""".strip()
+if [[ -f "$WORKSPACE_SRC_DIR/CMakeLists.txt" ]]; then
+  mkdir -p "$WORKSPACE_BUILD_DIR"
+  cmake -S "$WORKSPACE_SRC_DIR" -B "$WORKSPACE_BUILD_DIR" -DCMAKE_BUILD_TYPE=Release >/dev/null
+  cmake --build "$WORKSPACE_BUILD_DIR" --config Release -j >/dev/null
+  BINARY="$WORKSPACE_BINARY"
+  MODE="workspace"
+elif [[ -x "$IMAGE_BINARY" ]]; then
+  BINARY="$IMAGE_BINARY"
+  MODE="image"
+else
+  echo "[frontend] neither workspace source nor image binary found"
+  echo "[frontend] expected one of:"
+  echo "  - $WORKSPACE_SRC_DIR/CMakeLists.txt"
+  echo "  - $IMAGE_BINARY"
+  exit 1
+fi
 
-lines = []
-if rows_str:
-    for line in rows_str.split('\n'):
-        if line.strip():
-            lines.append([cell.strip() for cell in line.split('|')])
+print_section "Environment"
+echo "[frontend] arch           : $ARCH"
+echo "[frontend] cpu model      : $CPU_MODEL"
+echo "[frontend] cpu cores      : $CPU_CORES"
+echo "[frontend] cpu cache      : $CPU_CACHE"
+echo "[frontend] sched policy   : $SCHED_POLICY"
+echo "[frontend] sched priority : $SCHED_PRIORITY"
+echo "[frontend] cpu affinity   : $CPU_AFFINITY"
+echo "[frontend] cpu governor   : $CPU_GOVERNOR"
 
-if not lines:
-    print("No data")
-    sys.exit(0)
+CMD="$BINARY $FRAME0 $FRAME1"
+echo "[frontend] mode: $MODE"
+echo "[frontend] command: $CMD"
+$CMD | tee "$LOG_FILE"
 
-col_widths = [len(h) for h in headers]
-for row in lines:
-    for i, cell in enumerate(row):
-        col_widths[i] = max(col_widths[i], len(cell))
+echo "[frontend] done. Log: $LOG_FILE"
 
-sep = "|" + "|".join("=" * (w + 1) for w in col_widths) + "|"
-header = "|" + "|".join(f" {h:^{col_widths[i]}} " for i, h in enumerate(headers)) + "|"
-
-lines_str = sep + "\n" + header + "\n" + sep + "\n"
-for row in lines:
-    lines_str += "|" + "|".join(f" {cell:^{col_widths[i]}} " for i, cell in enumerate(row)) + "|\n"
-lines_str += sep
-
-print(lines_str)
-PY
-}
-
-summarize() {
-  local log="$1"
-  
-  python3 - <<'PY'
+# Generate summary table
+python3 - "$LOG_FILE" <<'PYEOF'
 import re
 import sys
 import os
@@ -88,21 +89,19 @@ def make_table(headers, rows):
     lines_str += sep
     return lines_str
 
-log = sys.argv[1]
+log_path = sys.argv[1] if len(sys.argv) > 1 else "/workspace/frontend.log"
 
-if not os.path.exists(log):
-    print(f"[frontend] log not found: {log}")
+if not os.path.exists(log_path):
+    print(f"[frontend] log not found: {log_path}")
     sys.exit(0)
 
-with open(log, 'r') as f:
+with open(log_path, 'r') as f:
     content = f.read()
 
 # Parse key metrics
 image_size = re.search(r'image_size:\s*(\d+)x(\d+)', content)
 detected = re.search(r'detected_points:\s*(\d+)', content)
 tracked = re.search(r'tracked_points:\s*(\d+)', content)
-load_ms = re.search(r'load_ms:\s*([\d.]+)', content)
-gray_ms = re.search(r'gray_ms:\s*([\d.]+)', content)
 harris_ms = re.search(r'harris_ms:\s*([\d.]+)', content)
 lk_ms = re.search(r'lk_ms:\s*([\d.]+)', content)
 total_ms = re.search(r'total_ms:\s*([\d.]+)', content)
@@ -131,47 +130,4 @@ else:
 headers = ["metric", "value"]
 print("\n========== Summary ==========\n")
 print(make_table(headers, rows))
-PY
-  "$log"
-}
-
-if [[ ! -f "$FRAME0" || ! -f "$FRAME1" ]]; then
-  echo "[frontend] dataset not found: $FRAME0 / $FRAME1"
-  exit 1
-fi
-
-if [[ -f "$WORKSPACE_SRC_DIR/CMakeLists.txt" ]]; then
-  mkdir -p "$WORKSPACE_BUILD_DIR"
-  cmake -S "$WORKSPACE_SRC_DIR" -B "$WORKSPACE_BUILD_DIR" -DCMAKE_BUILD_TYPE=Release >/dev/null
-  cmake --build "$WORKSPACE_BUILD_DIR" --config Release -j >/dev/null
-  BINARY="$WORKSPACE_BINARY"
-  MODE="workspace"
-elif [[ -x "$IMAGE_BINARY" ]]; then
-  BINARY="$IMAGE_BINARY"
-  MODE="image"
-else
-  echo "[frontend] neither workspace source nor image binary found"
-  echo "[frontend] expected one of:"
-  echo "  - $WORKSPACE_SRC_DIR/CMakeLists.txt"
-  echo "  - $IMAGE_BINARY"
-  exit 1
-fi
-
-print_section "Environment"
-echo "[frontend] arch           : $ARCH"
-echo "[frontend] cpu model      : $CPU_MODEL"
-echo "[frontend] cpu cores      : $CPU_CORES"
-echo "[frontend] cpu cache     : $CPU_CACHE"
-echo "[frontend] sched policy   : $SCHED_POLICY"
-echo "[frontend] sched priority : $SCHED_PRIORITY"
-echo "[frontend] cpu affinity   : $CPU_AFFINITY"
-echo "[frontend] cpu governor   : $CPU_GOVERNOR"
-
-CMD="$BINARY $FRAME0 $FRAME1"
-echo "[frontend] mode: $MODE"
-echo "[frontend] command: $CMD"
-$CMD | tee "$LOG_FILE"
-
-echo "[frontend] done. Log: $LOG_FILE"
-
-summarize "$LOG_FILE"
+PYEOF
