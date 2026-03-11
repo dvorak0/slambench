@@ -374,3 +374,4 @@ print(f"\n[bench] summary [{dataset_name}]:")
 print(make_table(["engine", "total (s)", "iters", "per_iter (s)", "iter/s", "per_iter ratio", "initial cost", "final cost"], rows))
 PY
 
+}
