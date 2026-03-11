@@ -51,7 +51,7 @@ int main(int argc, char** argv) {
   }
   const auto t2_end = Clock::now();
 
-  auto orb = cv::ORB::create(500);
+  auto orb = cv::ORB::create(200);
   std::vector<cv::KeyPoint> keypoints0;
   std::vector<cv::KeyPoint> keypoints1;
   cv::Mat descriptors0;
