@@ -11,8 +11,7 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Upgrade pip
-RUN python3 -m pip install --no-cache-dir --upgrade pip && \
-    python3 -m pip install --no-cache-dir prettytable
+RUN python3 -m pip install --no-cache-dir --upgrade pip
 
 # Provide SCM version hints (build context lacks .git metadata)
 ENV SETUPTOOLS_SCM_PRETEND_VERSION_FOR_SYMFORCE=0.0.0 \
@@ -68,6 +67,9 @@ COPY frontend/ /opt/slambench/frontend/
 RUN mkdir -p build && cd build && \
     cmake .. -DCMAKE_BUILD_TYPE=Release && \
     make -j"$(nproc)"
+
+# Install prettytable for summary tables
+RUN python3 -m pip install --no-cache-dir prettytable
 
 # Copy scripts/data into the image workspace
 WORKDIR /workspace
