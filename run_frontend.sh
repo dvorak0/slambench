@@ -66,12 +66,29 @@ PY
 summarize() {
   local log="$1"
   
-  python3 - <<PY
+  python3 - <<'PY'
 import re
 import sys
 import os
 
-log = "$log"
+def make_table(headers, rows):
+    col_widths = [len(h) for h in headers]
+    for row in rows:
+        for i, cell in enumerate(row):
+            if i < len(col_widths):
+                col_widths[i] = max(col_widths[i], len(str(cell)))
+    
+    sep = "|" + "|".join("=" * (w + 1) for w in col_widths) + "|"
+    header = "|" + "|".join(f" {h:^{col_widths[i]}} " for i, h in enumerate(headers)) + "|"
+    
+    lines_str = sep + "\n" + header + "\n" + sep + "\n"
+    for row in rows:
+        cells = [str(cell) for cell in row]
+        lines_str += "|" + "|".join(f" {cell:^{col_widths[i]}} " for i, cell in enumerate(cells)) + "|\n"
+    lines_str += sep
+    return lines_str
+
+log = sys.argv[1]
 
 if not os.path.exists(log):
     print(f"[frontend] log not found: {log}")
@@ -111,32 +128,11 @@ if all([image_size, detected, tracked, harris_ms, lk_ms, total_ms]):
 else:
     rows.append(["parse_error", "could not parse log"])
 
-arch = "$ARCH"
-cpu_model = "$CPU_MODEL"
-cpu_cores = "$CPU_CORES"
-cpu_cache = "$CPU_CACHE"
-sched_policy = "$SCHED_POLICY"
-sched_priority = "$SCHED_PRIORITY"
-cpu_affinity = "$CPU_AFFINITY"
-cpu_governor = "$CPU_GOVERNOR"
-
+headers = ["metric", "value"]
 print("\n========== Summary ==========\n")
-print(f"[frontend] image          : $FRAME0")
-print(f"[frontend] arch           : {arch}")
-print(f"[frontend] cpu model      : {cpu_model}")
-print(f"[frontend] cpu cores      : {cpu_cores}")
-print(f"[frontend] cpu cache      : {cpu_cache}")
-print(f"[frontend] sched policy   : {sched_policy}")
-print(f"[frontend] sched priority : {sched_priority}")
-print(f"[frontend] cpu affinity   : {cpu_affinity}")
-print(f"[frontend] cpu governor   : {cpu_governor}")
-print(f"\n[frontend] summary:")
-
-headers = "metric|value"
-rows_str = "\n".join("|".join(row) for row in rows)
-
-print(make_table(headers, rows_str))
+print(make_table(headers, rows))
 PY
+  "$log"
 }
 
 if [[ ! -f "$FRAME0" || ! -f "$FRAME1" ]]; then
