@@ -139,7 +139,6 @@ parse_msckf_final_cost() {
   fi
   awk '/^iter [0-9]+ loss/ {v=$4} END {print v}' "$log"
 }
-
 run_one_dataset() {
   local dataset="$1"
   local suffix="$2"
