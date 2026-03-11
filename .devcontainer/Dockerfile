@@ -71,12 +71,6 @@ RUN mkdir -p build && cd build && \
 # Install prettytable for summary tables
 RUN python3 -m pip install --no-cache-dir prettytable
 
-# Copy scripts/data into the image workspace
-WORKDIR /workspace
-COPY run_symforce.sh run_ceres.sh run_gtsam.sh run_msckf.sh run_backend.sh run_benchmarks.sh run_frontend.sh README.md ./ 
-COPY data/ ./data/
-RUN chmod +x /workspace/run_*.sh
-
 # Install OpenBLAS late to preserve cache on heavy build layers.
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
@@ -88,6 +82,12 @@ WORKDIR /opt/slambench/msckf_c
 RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && \
     cmake --build build -j"$(nproc)" --target \
       msckf_runner msckf_runner_rr msckf_runner_rc msckf_runner_cr msckf_runner_cc msckf_runner_openblas
+
+# Copy scripts/data into the image workspace last so script-only edits keep prior layers cached.
+WORKDIR /workspace
+COPY run_symforce.sh run_ceres.sh run_gtsam.sh run_msckf.sh run_backend.sh run_benchmarks.sh run_frontend.sh README.md ./ 
+COPY data/ ./data/
+RUN chmod +x /workspace/run_*.sh
 
 # Create a non-root user for devcontainer sessions
 ARG USERNAME=vscode
