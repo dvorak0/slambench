@@ -115,6 +115,10 @@ int main(int argc, char** argv) {
   }
   const auto t5 = Clock::now();
 
+  const double harris_ms = ms_since(t3_start, t3_end);
+  const double lk_ms = ms_since(t4_start, t4_end);
+  const double total_ms = harris_ms + lk_ms;
+
   std::cout << std::fixed << std::setprecision(3);
   std::cout << "[frontend] frame0: " << frame0_path << "\n";
   std::cout << "[frontend] frame1: " << frame1_path << "\n";
@@ -123,9 +127,9 @@ int main(int argc, char** argv) {
   std::cout << "[frontend] tracked_points: " << tracked0.size() << "\n";
   std::cout << "[frontend] load_ms: " << ms_since(t0, t1) << "\n";
   std::cout << "[frontend] gray_ms: " << ms_since(t2_start, t2_end) << "\n";
-  std::cout << "[frontend] harris_ms: " << ms_since(t3_start, t3_end) << "\n";
-  std::cout << "[frontend] lk_ms: " << ms_since(t4_start, t4_end) << "\n";
-  std::cout << "[frontend] total_ms: " << ms_since(t0, t5) << "\n";
+  std::cout << "[frontend] harris_ms: " << harris_ms << "\n";
+  std::cout << "[frontend] lk_ms: " << lk_ms << "\n";
+  std::cout << "[frontend] total_ms: " << total_ms << "\n";
   std::cout << "[frontend] saved_vis: " << vis_path << "\n";
 
   return 0;
