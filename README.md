@@ -17,3 +17,25 @@ To drop into a shell instead of running the benchmarks, override the entrypoint:
 
 Outputs (saved in the container or mounted workspace):
 - `symforce.log`, `ceres.log`, `gtsam.log`, `msckf.log`
+
+## Frontend benchmark
+
+The frontend benchmark supports both modes:
+- **image mode**: run directly from the baked image, no workspace mount needed
+- **workspace mode**: mount the repo and rebuild `frontend/` from source before running
+
+Run directly from the image:
+
+```
+docker run --rm --cpuset-cpus="0" --entrypoint /bin/bash slambench-dev /workspace/run_frontend.sh
+```
+
+Run with the workspace mounted (useful during development):
+
+```
+docker run --rm --cpuset-cpus="0" -v "$PWD":/workspace --entrypoint /bin/bash slambench-dev /workspace/run_frontend.sh
+```
+
+Frontend outputs:
+- `frontend.log`
+- `frontend_harris_lk_vis.png`
