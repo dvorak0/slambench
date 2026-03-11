@@ -3,6 +3,7 @@ msckf_c/build/
 symforce/build/
 ceres-solver/build/
 gtsam/build/
+frontend/build/
 
 # Runtime outputs
 *.log
