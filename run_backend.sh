@@ -321,13 +321,14 @@ cpu_affinity = os.environ.get("CPU_AFFINITY", "?")
 cpu_governor = os.environ.get("CPU_GOVERNOR", "?")
 
 def make_table(headers, rows):
-    widths = [max(len(str(headers[i])), *(len(str(r[i])) for r in rows)) for i in range(len(headers))]
-    align = ["<"] + [">"] * (len(headers) - 1)
-    def sep(char="-"):
-        return "+" + "+".join(char * (w + 2) for w in widths) + "+"
-    def fmt_row(row):
-        return "|" + "|".join(f" {str(row[i]):{align[i]}{widths[i]}} " for i in range(len(headers))) + "|"
-    return "\n".join([sep("-"), fmt_row(headers), sep("=")] + [fmt_row(r) for r in rows] + [sep("-")])
+    import prettytable
+    table = prettytable.PrettyTable()
+    table.field_names = headers
+    for row in rows:
+        table.add_row(row)
+    table.align = "r"
+    table.align[headers[0]] = "l"
+    return table.get_string()
 
 results = [
     ("symforce", sym_total, sym_iters, sym_ci_str, sym_cf_str),

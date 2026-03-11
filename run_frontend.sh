@@ -73,21 +73,14 @@ import sys
 import os
 
 def make_table(headers, rows):
-    col_widths = [len(h) for h in headers]
+    import prettytable
+    table = prettytable.PrettyTable()
+    table.field_names = headers
     for row in rows:
-        for i, cell in enumerate(row):
-            if i < len(col_widths):
-                col_widths[i] = max(col_widths[i], len(str(cell)))
-    
-    sep = "|" + "|".join("=" * (w + 1) for w in col_widths) + "|"
-    header = "|" + "|".join(f" {h:^{col_widths[i]}} " for i, h in enumerate(headers)) + "|"
-    
-    lines_str = sep + "\n" + header + "\n" + sep + "\n"
-    for row in rows:
-        cells = [str(cell) for cell in row]
-        lines_str += "|" + "|".join(f" {cell:^{col_widths[i]}} " for i, cell in enumerate(cells)) + "|\n"
-    lines_str += sep
-    return lines_str
+        table.add_row(row)
+    table.align = "r"
+    table.align[headers[0]] = "l"
+    return table.get_string()
 
 log_path = sys.argv[1] if len(sys.argv) > 1 else "/workspace/frontend.log"
 
