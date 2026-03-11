@@ -4,26 +4,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKSPACE_SRC_DIR="$ROOT_DIR/frontend"
 WORKSPACE_BUILD_DIR="$WORKSPACE_SRC_DIR/build"
-MODE_NAME="${1:-harris_lk}"
-LOG_FILE="${2:-$ROOT_DIR/frontend.log}"
 FRAME0="$ROOT_DIR/data/euroc/frame0.png"
 FRAME1="$ROOT_DIR/data/euroc/frame1.png"
-
-case "$MODE_NAME" in
-  harris_lk)
-    WORKSPACE_BINARY="$WORKSPACE_BUILD_DIR/frontend_harris_lk"
-    IMAGE_BINARY="/opt/slambench/frontend/build/frontend_harris_lk"
-    ;;
-  orb_bf)
-    WORKSPACE_BINARY="$WORKSPACE_BUILD_DIR/frontend_orb_bf"
-    IMAGE_BINARY="/opt/slambench/frontend/build/frontend_orb_bf"
-    ;;
-  *)
-    echo "[frontend] unsupported mode: $MODE_NAME"
-    echo "[frontend] supported modes: harris_lk, orb_bf"
-    exit 1
-    ;;
-esac
 
 # Environment info
 ARCH="$(uname -m)"
@@ -42,54 +24,24 @@ print_section() {
   echo
 }
 
-if [[ ! -f "$FRAME0" || ! -f "$FRAME1" ]]; then
-  echo "[frontend] dataset not found: $FRAME0 / $FRAME1"
-  exit 1
-fi
+summarize_frontend_log() {
+  local log_file="$1"
 
-if [[ -f "$WORKSPACE_SRC_DIR/CMakeLists.txt" ]]; then
-  mkdir -p "$WORKSPACE_BUILD_DIR"
-  cmake -S "$WORKSPACE_SRC_DIR" -B "$WORKSPACE_BUILD_DIR" -DCMAKE_BUILD_TYPE=Release >/dev/null
-  cmake --build "$WORKSPACE_BUILD_DIR" --config Release -j >/dev/null
-  BINARY="$WORKSPACE_BINARY"
-  SOURCE_MODE="workspace"
-elif [[ -x "$IMAGE_BINARY" ]]; then
-  BINARY="$IMAGE_BINARY"
-  SOURCE_MODE="image"
-else
-  echo "[frontend] neither workspace source nor image binary found"
-  echo "[frontend] expected one of:"
-  echo "  - $WORKSPACE_SRC_DIR/CMakeLists.txt"
-  echo "  - $IMAGE_BINARY"
-  exit 1
-fi
-
-print_section "Environment"
-echo "[frontend] arch           : $ARCH"
-echo "[frontend] cpu model      : $CPU_MODEL"
-echo "[frontend] cpu cores      : $CPU_CORES"
-echo "[frontend] cpu cache      : $CPU_CACHE"
-echo "[frontend] sched policy   : $SCHED_POLICY"
-echo "[frontend] sched priority : $SCHED_PRIORITY"
-echo "[frontend] cpu affinity   : $CPU_AFFINITY"
-echo "[frontend] cpu governor   : $CPU_GOVERNOR"
-
-CMD="$BINARY $FRAME0 $FRAME1"
-echo "[frontend] frontend: $MODE_NAME"
-echo "[frontend] mode: $SOURCE_MODE"
-echo "[frontend] command: $CMD"
-$CMD | tee "$LOG_FILE"
-
-echo "[frontend] done. Log: $LOG_FILE"
-
-# Generate summary table
-python3 - "$LOG_FILE" <<'PYEOF'
+  python3 - "$log_file" <<'PYEOF'
+import os
 import re
 import sys
-import os
+import prettytable
+
+log_path = sys.argv[1]
+if not os.path.exists(log_path):
+    print(f"[frontend] log not found: {log_path}")
+    sys.exit(0)
+
+with open(log_path, 'r') as f:
+    content = f.read()
 
 def make_table(headers, rows):
-    import prettytable
     table = prettytable.PrettyTable()
     table.field_names = headers
     for row in rows:
@@ -98,20 +50,10 @@ def make_table(headers, rows):
     table.align[headers[0]] = "l"
     return table.get_string()
 
-log_path = sys.argv[1] if len(sys.argv) > 1 else "/workspace/frontend.log"
-
-if not os.path.exists(log_path):
-    print(f"[frontend] log not found: {log_path}")
-    sys.exit(0)
-
-with open(log_path, 'r') as f:
-    content = f.read()
-
-# Parse key metrics
 image_size = re.search(r'image_size:\s*(\d+)x(\d+)', content)
 total_ms = re.search(r'total_ms:\s*([\d.]+)', content)
-
 rows = []
+
 if image_size and total_ms:
     w, h = image_size.group(1), image_size.group(2)
     tot = float(total_ms.group(1))
@@ -157,7 +99,69 @@ if image_size and total_ms:
 else:
     rows.append(["parse_error", "could not parse log"])
 
-headers = ["metric", "value"]
 print("\n========== Summary ==========\n")
-print(make_table(headers, rows))
+print(make_table(["metric", "value"], rows))
 PYEOF
+}
+
+run_one_frontend() {
+  local frontend_name="$1"
+  local workspace_binary="$2"
+  local image_binary="$3"
+  local log_file="$4"
+
+  local binary=""
+  local source_mode=""
+
+  if [[ -f "$WORKSPACE_SRC_DIR/CMakeLists.txt" ]]; then
+    mkdir -p "$WORKSPACE_BUILD_DIR"
+    cmake -S "$WORKSPACE_SRC_DIR" -B "$WORKSPACE_BUILD_DIR" -DCMAKE_BUILD_TYPE=Release >/dev/null
+    cmake --build "$WORKSPACE_BUILD_DIR" --config Release -j >/dev/null
+    binary="$workspace_binary"
+    source_mode="workspace"
+  elif [[ -x "$image_binary" ]]; then
+    binary="$image_binary"
+    source_mode="image"
+  else
+    echo "[frontend] neither workspace source nor image binary found for $frontend_name"
+    echo "[frontend] expected one of:"
+    echo "  - $WORKSPACE_SRC_DIR/CMakeLists.txt"
+    echo "  - $image_binary"
+    exit 1
+  fi
+
+  print_section "Frontend: $frontend_name"
+  echo "[frontend] frontend: $frontend_name"
+  echo "[frontend] mode: $source_mode"
+  echo "[frontend] command: $binary $FRAME0 $FRAME1"
+  "$binary" "$FRAME0" "$FRAME1" | tee "$log_file"
+  echo "[frontend] done. Log: $log_file"
+  summarize_frontend_log "$log_file"
+}
+
+if [[ ! -f "$FRAME0" || ! -f "$FRAME1" ]]; then
+  echo "[frontend] dataset not found: $FRAME0 / $FRAME1"
+  exit 1
+fi
+
+print_section "Environment"
+echo "[frontend] arch           : $ARCH"
+echo "[frontend] cpu model      : $CPU_MODEL"
+echo "[frontend] cpu cores      : $CPU_CORES"
+echo "[frontend] cpu cache      : $CPU_CACHE"
+echo "[frontend] sched policy   : $SCHED_POLICY"
+echo "[frontend] sched priority : $SCHED_PRIORITY"
+echo "[frontend] cpu affinity   : $CPU_AFFINITY"
+echo "[frontend] cpu governor   : $CPU_GOVERNOR"
+
+run_one_frontend \
+  "harris_lk" \
+  "$WORKSPACE_BUILD_DIR/frontend_harris_lk" \
+  "/opt/slambench/frontend/build/frontend_harris_lk" \
+  "$ROOT_DIR/frontend_harris_lk.log"
+
+run_one_frontend \
+  "orb_bf" \
+  "$WORKSPACE_BUILD_DIR/frontend_orb_bf" \
+  "/opt/slambench/frontend/build/frontend_orb_bf" \
+  "$ROOT_DIR/frontend_orb_bf.log"
