@@ -73,6 +73,16 @@ import sys
 import os
 
 def make_table(headers, rows):
+    import prettytable
+    t = prettytable.PrettyTable()
+    t.field_names = headers
+    for row in rows:
+        t.add_row(row)
+    t.align = "r"
+    t.align[headers[0]] = "l"
+    return str(t)
+
+def _make_table_old(headers, rows):
     col_widths = [len(h) for h in headers]
     for row in rows:
         for i, cell in enumerate(row):

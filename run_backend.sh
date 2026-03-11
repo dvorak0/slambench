@@ -322,6 +322,16 @@ cpu_affinity = os.environ.get("CPU_AFFINITY", "?")
 cpu_governor = os.environ.get("CPU_GOVERNOR", "?")
 
 def make_table(headers, rows):
+    import prettytable
+    t = prettytable.PrettyTable()
+    t.field_names = headers
+    for row in rows:
+        t.add_row(row)
+    t.align = "r"
+    t.align[headers[0]] = "l"
+    return str(t)
+
+def _make_table_old(headers, rows):
     widths = [max(len(str(headers[i])), *(len(str(r[i])) for r in rows)) for i in range(len(headers))]
     align = ["<"] + [">"] * (len(headers) - 1)
     def sep(char="-"):
