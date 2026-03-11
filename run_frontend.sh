@@ -73,15 +73,59 @@ import sys
 import os
 
 def make_table(headers, rows):
-    import prettytable
-    t = prettytable.PrettyTable()
-    t.field_names = headers
+    col_widths = [len(h) for h in headers]
     for row in rows:
-        t.add_row(row)
-    t.align = "r"
-    t.align[headers[0]] = "l"
-    return str(t)
+        for i, cell in enumerate(row):
+            if i < len(col_widths):
+                col_widths[i] = max(col_widths[i], len(str(cell)))
+    
+    sep = "|" + "|".join("=" * (w + 1) for w in col_widths) + "|"
+    header = "|" + "|".join(f" {h:^{col_widths[i]}} " for i, h in enumerate(headers)) + "|"
+    
+    lines_str = sep + "\n" + header + "\n" + sep + "\n"
+    for row in rows:
+        cells = [str(cell) for cell in row]
+        lines_str += "|" + "|".join(f" {cell:^{col_widths[i]}} " for i, cell in enumerate(cells)) + "|\n"
+    lines_str += sep
+    return lines_str
 
+log_path = sys.argv[1] if len(sys.argv) > 1 else "/workspace/frontend.log"
+
+if not os.path.exists(log_path):
+    print(f"[frontend] log not found: {log_path}")
+    sys.exit(0)
+
+with open(log_path, 'r') as f:
+    content = f.read()
+
+# Parse key metrics
+image_size = re.search(r'image_size:\s*(\d+)x(\d+)', content)
+detected = re.search(r'detected_points:\s*(\d+)', content)
+tracked = re.search(r'tracked_points:\s*(\d+)', content)
+harris_ms = re.search(r'harris_ms:\s*([\d.]+)', content)
+lk_ms = re.search(r'lk_ms:\s*([\d.]+)', content)
+total_ms = re.search(r'total_ms:\s*([\d.]+)', content)
+
+rows = []
+if all([image_size, detected, tracked, harris_ms, lk_ms, total_ms]):
+    w, h = image_size.group(1), image_size.group(2)
+    det = int(detected.group(1))
+    trk = int(tracked.group(1))
+    h_ms = float(harris_ms.group(1))
+    l_ms = float(lk_ms.group(1))
+    tot = float(total_ms.group(1))
+    
+    success_rate = (trk / det * 100) if det > 0 else 0
+    rows.append(["image_size", f"{w}x{h}"])
+    rows.append(["detected_points", f"{det}"])
+    rows.append(["tracked_points", f"{trk}"])
+    rows.append(["track_success_%", f"{success_rate:.1f}"])
+    rows.append(["harris_ms", f"{h_ms:.3f}"])
+    rows.append(["lk_ms", f"{l_ms:.3f}"])
+    rows.append(["total_ms", f"{tot:.3f}"])
+    rows.append(["fps", f"{1000.0/tot:.1f}"])
+else:
+    rows.append(["parse_error", "could not parse log"])
 
 headers = ["metric", "value"]
 print("\n========== Summary ==========\n")
