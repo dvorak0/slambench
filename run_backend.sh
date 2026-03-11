@@ -16,7 +16,7 @@ print_section() {
   echo
   echo "========== $title =========="
   echo
-}
+
 
 sanitize_name() {
   local s="$1"
@@ -24,12 +24,12 @@ sanitize_name() {
   s="${s// /_}"
   s="${s//=/_}"
   echo "$s"
-}
+
 
 parse_symforce_total() {
   local log="$1"
   awk -F'|' '/Optimizer<sym::Optimize>::Optimize/ {gsub(/ /,"",$3); print $3}' "$log" | head -n1
-}
+
 
 parse_symforce_iters() {
   local log="$1"
@@ -42,7 +42,7 @@ parse_symforce_iters() {
   local count
   count=$(grep -c 'LM<sym::Optimize> \[iter' "$log" || true)
   echo "${count:-0}"
-}
+
 
 parse_symforce_initial_cost() {
   local log="$1"
@@ -54,7 +54,7 @@ parse_symforce_initial_cost() {
       print b[1];
       exit
     }' "$log"
-}
+
 
 parse_symforce_final_cost() {
   local log="$1"
@@ -66,32 +66,32 @@ parse_symforce_final_cost() {
       v=b[3];
     }
     END {print v}' "$log"
-}
+
 
 parse_ceres_total() {
   local log="$1"
   awk '/^Total[[:space:]]/ {print $2}' "$log" | head -n1
-}
+
 
 parse_ceres_iters() {
   local log="$1"
   awk '/^[[:space:]]*[0-9]+[[:space:]]/ {print}' "$log" | wc -l
-}
+
 
 parse_ceres_initial_cost() {
   local log="$1"
   awk '/^Initial[[:space:]]/ {print $2}' "$log" | head -n1
-}
+
 
 parse_ceres_final_cost() {
   local log="$1"
   awk '/^Final[[:space:]]/ {print $2}' "$log" | head -n1
-}
+
 
 parse_gtsam_total() {
   local log="$1"
   awk '/^TIME[[:space:]]/ {print $2}' "$log" | head -n1
-}
+
 
 parse_gtsam_iters() {
   local log="$1"
@@ -102,32 +102,32 @@ parse_gtsam_iters() {
     return
   fi
   echo 1
-}
+
 
 parse_gtsam_initial_cost() {
   local log="$1"
   awk '/^Initial error:/ {print $3}' "$log" | head -n1
-}
+
 
 parse_gtsam_final_cost() {
   local log="$1"
   awk '/^final error:/ {print $3}' "$log" | head -n1
-}
+
 
 parse_msckf_total() {
   local log="$1"
   awk '/^TIME[[:space:]]/ {print $2}' "$log" | head -n1
-}
+
 
 parse_msckf_iters() {
   local log="$1"
   awk '/^iterations:/ {print $2}' "$log" | head -n1
-}
+
 
 parse_msckf_initial_cost() {
   local log="$1"
   awk '/^iter 0 loss/ {print $4; exit}' "$log"
-}
+
 
 parse_msckf_final_cost() {
   local log="$1"
@@ -138,7 +138,7 @@ parse_msckf_final_cost() {
     return
   fi
   awk '/^iter [0-9]+ loss/ {v=$4} END {print v}' "$log"
-}
+
 
 run_one_dataset() {
   local dataset="$1"
@@ -330,4 +330,47 @@ def make_table(headers, rows):
     t.align = "r"
     t.align[headers[0]] = "l"
     return str(t)
+
+
+results = [
+    ("symforce", sym_total, sym_iters, sym_ci_str, sym_cf_str),
+    ("ceres_dense", ceres_total, ceres_iters, ceres_ci_str, ceres_cf_str),
+    ("ceres_sparse", ceres_sparse_total, ceres_sparse_iters, ceres_sparse_ci_str, ceres_sparse_cf_str),
+    ("gtsam_bal", gtsam_bal_total, gtsam_bal_iters, gtsam_bal_ci_str, gtsam_bal_cf_str),
+    ("gtsam_smartfactor", gtsam_smart_total, gtsam_smart_iters, gtsam_smart_ci_str, gtsam_smart_cf_str),
+    ("msckf_rr", msckf_rr_total, msckf_rr_iters, msckf_rr_ci_str, msckf_rr_cf_str),
+    ("msckf_rc", msckf_rc_total, msckf_rc_iters, msckf_rc_ci_str, msckf_rc_cf_str),
+    ("msckf_cr", msckf_cr_total, msckf_cr_iters, msckf_cr_ci_str, msckf_cr_cf_str),
+    ("msckf_cc", msckf_cc_total, msckf_cc_iters, msckf_cc_ci_str, msckf_cc_cf_str),
+]
+if msckf_openblas_total_str and msckf_openblas_iters_str:
+    results.append(("msckf_openblas", float(msckf_openblas_total_str), int(msckf_openblas_iters_str), msckf_openblas_ci_str, msckf_openblas_cf_str))
+else:
+    results.append(("msckf_openblas", None, None, "", ""))
+base_per_iter = ceres_total / ceres_iters if ceres_iters > 0 else None
+rows = []
+for name, total, iters, cost_i_str, cost_f_str in results:
+    if total is None or iters is None:
+        rows.append([name, "n/a", "n/a", "n/a", "n/a", "n/a", "n/a", "n/a"])
+        continue
+    per_iter = total / iters if iters > 0 else float("nan")
+    rate = iters / total if total > 0 else float("nan")
+    ratio = (per_iter / base_per_iter) if (base_per_iter and base_per_iter > 0) else float("inf")
+    cost_i = f"{float(cost_i_str):.3e}" if cost_i_str else "n/a"
+    cost_f = f"{float(cost_f_str):.3e}" if cost_f_str else "n/a"
+    rows.append([name, f"{total:.3f}", f"{iters:d}", f"{per_iter:.3f}", f"{rate:.2f}", f"{ratio:.3f}x" if base_per_iter and base_per_iter > 0 else "n/a", cost_i, cost_f])
+
+print("\n========== Summary ==========\n")
+print(f"[bench] dataset        : {dataset_name}")
+print(f"[bench] arch           : {arch}")
+print(f"[bench] cpu model      : {cpu_model}")
+print(f"[bench] cpu cores      : {cpu_cores}")
+print(f"[bench] cpu cache      : {cpu_cache}")
+print(f"[bench] sched policy   : {sched_policy}")
+print(f"[bench] sched priority : {sched_priority}")
+print(f"[bench] cpu affinity   : {cpu_affinity}")
+print(f"[bench] cpu governor   : {cpu_governor}")
+print(f"\n[bench] summary [{dataset_name}]:")
+print(make_table(["engine", "total (s)", "iters", "per_iter (s)", "iter/s", "per_iter ratio", "initial cost", "final cost"], rows))
+PY
 

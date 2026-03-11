@@ -82,3 +82,8 @@ def make_table(headers, rows):
     t.align[headers[0]] = "l"
     return str(t)
 
+
+headers = ["metric", "value"]
+print("\n========== Summary ==========\n")
+print(make_table(headers, rows))
+PYEOF
