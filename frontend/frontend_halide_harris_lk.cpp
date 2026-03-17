@@ -163,8 +163,19 @@ int main(int argc, char** argv) {
   if (img1.channels() == 1) gray1 = img1; else cv::cvtColor(img1, gray1, cv::COLOR_BGR2GRAY);
   const auto t2_end = Clock::now();
 
-  const auto t3_start = Clock::now();
-  Halide::Buffer<float> response = compute_halide_harris(gray0);
+  Halide::Buffer<float> response;
+  const int warmup_runs = 3;
+  const int timed_runs = 5;
+  double halide_response_ms = 0.0;
+  for (int i = 0; i < warmup_runs + timed_runs; ++i) {
+    const auto t3_run_start = Clock::now();
+    response = compute_halide_harris(gray0);
+    const auto t3_run_end = Clock::now();
+    if (i >= warmup_runs) {
+      halide_response_ms = ms_since(t3_run_start, t3_run_end);
+    }
+  }
+
   const auto t3_mid = Clock::now();
   std::vector<cv::Point2f> points0 = select_points_from_response(response, 500, 0.01, 10.0);
   const auto t3_end = Clock::now();
@@ -214,7 +225,6 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  const double halide_response_ms = ms_since(t3_start, t3_mid);
   const double halide_post_ms = ms_since(t3_mid, t3_end);
   const double lk_ms = ms_since(t4_start, t4_end);
   const double total_ms = halide_response_ms + halide_post_ms + lk_ms;
