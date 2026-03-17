@@ -7,7 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(OpenCV REQUIRED)
 
 find_path(HALIDE_INCLUDE_DIR Halide.h)
-find_library(HALIDE_LIBRARY NAMES Halide Halide14)
+find_library(HALIDE_LIBRARY NAMES Halide Halide14 Halide13)
 
 add_executable(frontend_harris_lk frontend_harris_lk.cpp)
 target_link_libraries(frontend_harris_lk PRIVATE ${OpenCV_LIBS})

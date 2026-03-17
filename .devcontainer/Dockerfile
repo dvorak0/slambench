@@ -59,19 +59,8 @@ RUN mkdir -p build && cd build && \
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         libopencv-dev \
-        clang \
-        llvm-dev \
-        libclang-dev \
-        zlib1g-dev \
-        libxml2-dev && \
+        libhalide13-0-dev && \
     rm -rf /var/lib/apt/lists/*
-
-# Build Halide from source late so it only affects frontend-related layers.
-WORKDIR /opt/halide-src
-RUN git clone --depth 1 --branch v14.0.0 https://github.com/halide/Halide.git /opt/halide-src && \
-    cmake -S /opt/halide-src -B /opt/halide-src/build -DCMAKE_BUILD_TYPE=Release && \
-    cmake --build /opt/halide-src/build -j"$(nproc)" --target Halide && \
-    cmake --install /opt/halide-src/build
 
 # Build frontend benchmarks
 WORKDIR /opt/slambench/frontend
