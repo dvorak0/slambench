@@ -71,7 +71,7 @@ static Halide::Buffer<float> compute_halide_harris(const cv::Mat& gray, bool use
 
   if (use_autoschedule) {
     // Set estimates for autoscheduler
-    out.estimate(x, 0, width).estimate(y, 0, height);
+    out.set_estimate(x, 0, width).set_estimate(y, 0, height);
     
     // Create pipeline and apply autoschedule
     Pipeline p(out);
