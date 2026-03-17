@@ -165,6 +165,7 @@ int main(int argc, char** argv) {
 
   const auto t3_start = Clock::now();
   Halide::Buffer<float> response = compute_halide_harris(gray0);
+  const auto t3_mid = Clock::now();
   std::vector<cv::Point2f> points0 = select_points_from_response(response, 500, 0.01, 10.0);
   const auto t3_end = Clock::now();
 
@@ -213,9 +214,10 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  const double harris_ms = ms_since(t3_start, t3_end);
+  const double halide_response_ms = ms_since(t3_start, t3_mid);
+  const double halide_post_ms = ms_since(t3_mid, t3_end);
   const double lk_ms = ms_since(t4_start, t4_end);
-  const double total_ms = harris_ms + lk_ms;
+  const double total_ms = halide_response_ms + halide_post_ms + lk_ms;
 
   std::cout << std::fixed << std::setprecision(3);
   std::cout << "[frontend] frame0: " << frame0_path << "\n";
@@ -225,7 +227,8 @@ int main(int argc, char** argv) {
   std::cout << "[frontend] tracked_points: " << tracked0.size() << "\n";
   std::cout << "[frontend] load_ms: " << ms_since(t0, t1) << "\n";
   std::cout << "[frontend] gray_ms: " << ms_since(t2_start, t2_end) << "\n";
-  std::cout << "[frontend] halide_harris_ms: " << harris_ms << "\n";
+  std::cout << "[frontend] halide_response_ms: " << halide_response_ms << "\n";
+  std::cout << "[frontend] halide_post_ms: " << halide_post_ms << "\n";
   std::cout << "[frontend] lk_ms: " << lk_ms << "\n";
   std::cout << "[frontend] total_ms: " << total_ms << "\n";
   std::cout << "[frontend] saved_vis: " << vis_path << "\n";
