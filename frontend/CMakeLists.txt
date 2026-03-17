@@ -12,7 +12,8 @@ target_link_libraries(frontend_harris_lk PRIVATE ${OpenCV_LIBS})
 add_executable(frontend_orb_bf frontend_orb_bf.cpp)
 target_link_libraries(frontend_orb_bf PRIVATE ${OpenCV_LIBS})
 
-# Try conda path first, then system paths
+# Halide is only needed for frontend_halide_harris_lk
+# Find it only when actually building that target
 find_path(HALIDE_INCLUDE_DIR
   NAMES Halide.h
   HINTS /opt/conda/include /usr/include /usr/local/include
@@ -21,12 +22,11 @@ find_library(HALIDE_LIBRARY
   NAMES Halide libHalide.so
   HINTS /opt/conda/lib /usr/lib /usr/lib/x86_64-linux-gnu /usr/local/lib)
 
-if(NOT HALIDE_INCLUDE_DIR OR NOT HALIDE_LIBRARY)
-  message(FATAL_ERROR "Halide not found. HALIDE_INCLUDE_DIR='${HALIDE_INCLUDE_DIR}', HALIDE_LIBRARY='${HALIDE_LIBRARY}'")
+if(HALIDE_INCLUDE_DIR AND HALIDE_LIBRARY)
+  message(STATUS "Found Halide: ${HALIDE_INCLUDE_DIR}, ${HALIDE_LIBRARY}")
+  add_executable(frontend_halide_harris_lk frontend_halide_harris_lk.cpp)
+  target_include_directories(frontend_halide_harris_lk PRIVATE ${HALIDE_INCLUDE_DIR})
+  target_link_libraries(frontend_halide_harris_lk PRIVATE ${OpenCV_LIBS} ${HALIDE_LIBRARY} dl pthread)
+else()
+  message(WARNING "Halide not found, frontend_halide_harris_lk will not be built")
 endif()
-
-message(STATUS "Found Halide: ${HALIDE_INCLUDE_DIR}, ${HALIDE_LIBRARY}")
-
-add_executable(frontend_halide_harris_lk frontend_halide_harris_lk.cpp)
-target_include_directories(frontend_halide_harris_lk PRIVATE ${HALIDE_INCLUDE_DIR})
-target_link_libraries(frontend_halide_harris_lk PRIVATE ${OpenCV_LIBS} ${HALIDE_LIBRARY} dl pthread)

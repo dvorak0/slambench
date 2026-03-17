@@ -61,7 +61,7 @@ RUN apt-get update && \
         libopencv-dev && \
     rm -rf /var/lib/apt/lists/*
 
-# Build stable frontend benchmarks first.
+# Build stable frontend benchmarks first (without Halide).
 WORKDIR /opt/slambench/frontend
 COPY frontend/CMakeLists.txt /opt/slambench/frontend/
 COPY frontend/frontend_harris_lk.cpp /opt/slambench/frontend/
@@ -105,8 +105,10 @@ ENV PATH="/opt/conda/bin:$PATH" \
     CPATH="/opt/conda/include:$CPATH"
 
 WORKDIR /opt/slambench/frontend
+COPY frontend/CMakeLists.txt /opt/slambench/frontend/
 COPY frontend/frontend_halide_harris_lk.cpp /opt/slambench/frontend/
-RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
+RUN rm -rf build && mkdir -p build && \
+    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
     -DHALIDE_INCLUDE_DIR=/opt/conda/include \
     -DHALIDE_LIBRARY=/opt/conda/lib/libHalide.so && \
     cmake --build build -j"$(nproc)" --target frontend_halide_harris_lk
