@@ -10,8 +10,8 @@ RUN apt-get update && \
         git curl ca-certificates sudo && \
     rm -rf /var/lib/apt/lists/*
 
-# Upgrade pip
-RUN python3 -m pip install --no-cache-dir --upgrade pip
+# Upgrade pip and install a newer CMake (Halide's CMake package requires >= 3.28)
+RUN python3 -m pip install --no-cache-dir --upgrade pip cmake
 
 # Provide SCM version hints (build context lacks .git metadata)
 ENV SETUPTOOLS_SCM_PRETEND_VERSION_FOR_SYMFORCE=0.0.0 \
