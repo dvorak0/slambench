@@ -85,36 +85,17 @@ RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && \
     cmake --build build -j"$(nproc)" --target \
       msckf_runner msckf_runner_rr msckf_runner_rc msckf_runner_cr msckf_runner_cc msckf_runner_openblas
 
-# Install Halide from source (includes autoscheduler) - for C++ development
-RUN apt-get update && \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-        ninja-build llvm-14-dev libclang-14-dev clang-14 lld-14 && \
-    rm -rf /var/lib/apt/lists/*
-
-# Clone and build Halide from source with autoscheduler
-WORKDIR /opt
-RUN git clone --depth 1 --branch v15.0.0 https://github.com/halide/Halide.git && \
-    mkdir -p Halide/build && cd Halide/build && \
-    cmake .. -G Ninja \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DWITH_TESTS=OFF \
-        -DWITH_APPS=OFF \
-        -DWITH_TUTORIALS=OFF \
-        -DENABLE_AUTOSCHEDULER=ON \
-        -DAUTOSCHEDULER=Mullapudi2016 \
-        -DLLVM_DIR=/usr/lib/llvm-14/lib/cmake/llvm \
-        -DClang_DIR=/usr/lib/llvm-14/lib/cmake/clang \
-        -DLLD_DIR=/usr/lib/llvm-14/lib/cmake/lld && \
-    ninja && \
-    ninja install && \
-    ldconfig
+# Install Halide binary wheel (recommended by Halide README even for C++ usage).
+# CMake can find Halide from the same Python environment.
+RUN python3 -m pip install --no-cache-dir halide
 
 # Build the experimental Halide frontend
 WORKDIR /opt/slambench/frontend
 COPY frontend/CMakeLists.txt /opt/slambench/frontend/
 COPY frontend/frontend_halide_harris_lk.cpp /opt/slambench/frontend/
-RUN rm -rf build && mkdir -p build && \
-    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && \
+RUN HALIDE_ROOT="$(python3 -c 'import halide; print(halide.install_dir())')" && \
+    rm -rf build && mkdir -p build && \
+    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$HALIDE_ROOT" && \
     cmake --build build -j"$(nproc)" --target frontend_halide_harris_lk
 
 # Copy scripts/data into the image workspace last so script-only edits keep prior layers cached.

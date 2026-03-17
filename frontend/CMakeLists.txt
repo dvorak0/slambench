@@ -12,21 +12,30 @@ target_link_libraries(frontend_harris_lk PRIVATE ${OpenCV_LIBS})
 add_executable(frontend_orb_bf frontend_orb_bf.cpp)
 target_link_libraries(frontend_orb_bf PRIVATE ${OpenCV_LIBS})
 
-# Halide is only needed for frontend_halide_harris_lk
-# Find it in /usr/local (from source install) or system paths
-find_path(HALIDE_INCLUDE_DIR
-  NAMES Halide.h
-  HINTS /usr/local/include /usr/include
-  PATH_SUFFIXES halide13 halide Halide)
-find_library(HALIDE_LIBRARY
-  NAMES Halide libHalide.so
-  HINTS /usr/local/lib /usr/lib /usr/lib/x86_64-linux-gnu)
+# Halide is only needed for frontend_halide_harris_lk.
+# Prefer CMake package discovery (works with official pip wheel / binary installs),
+# then fall back to manual header/library lookup.
+find_package(Halide CONFIG QUIET)
 
-if(HALIDE_INCLUDE_DIR AND HALIDE_LIBRARY)
-  message(STATUS "Found Halide: ${HALIDE_INCLUDE_DIR}, ${HALIDE_LIBRARY}")
+if(Halide_FOUND)
+  message(STATUS "Found Halide via CMake package")
   add_executable(frontend_halide_harris_lk frontend_halide_harris_lk.cpp)
-  target_include_directories(frontend_halide_harris_lk PRIVATE ${HALIDE_INCLUDE_DIR})
-  target_link_libraries(frontend_halide_harris_lk PRIVATE ${OpenCV_LIBS} ${HALIDE_LIBRARY} dl pthread)
+  target_link_libraries(frontend_halide_harris_lk PRIVATE ${OpenCV_LIBS} Halide::Halide)
 else()
-  message(WARNING "Halide not found, frontend_halide_harris_lk will not be built")
+  find_path(HALIDE_INCLUDE_DIR
+    NAMES Halide.h
+    HINTS /usr/local/include /usr/include
+    PATH_SUFFIXES halide13 halide Halide)
+  find_library(HALIDE_LIBRARY
+    NAMES Halide libHalide.so
+    HINTS /usr/local/lib /usr/lib /usr/lib/x86_64-linux-gnu)
+
+  if(HALIDE_INCLUDE_DIR AND HALIDE_LIBRARY)
+    message(STATUS "Found Halide: ${HALIDE_INCLUDE_DIR}, ${HALIDE_LIBRARY}")
+    add_executable(frontend_halide_harris_lk frontend_halide_harris_lk.cpp)
+    target_include_directories(frontend_halide_harris_lk PRIVATE ${HALIDE_INCLUDE_DIR})
+    target_link_libraries(frontend_halide_harris_lk PRIVATE ${OpenCV_LIBS} ${HALIDE_LIBRARY} dl pthread)
+  else()
+    message(WARNING "Halide not found, frontend_halide_harris_lk will not be built")
+  endif()
 endif()
