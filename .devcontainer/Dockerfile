@@ -85,32 +85,33 @@ RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && \
     cmake --build build -j"$(nproc)" --target \
       msckf_runner msckf_runner_rr msckf_runner_rc msckf_runner_cr msckf_runner_cc msckf_runner_openblas
 
-# Install Halide via conda (includes autoscheduler) and build the experimental Halide frontend very late so Halide-only edits don't invalidate earlier layers.
+# Install Halide from source (includes autoscheduler) - for C++ development
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-        wget libarchive13 && \
+        ninja-build llvm-dev libclang-dev clang && \
     rm -rf /var/lib/apt/lists/*
 
-# Install Miniconda
-RUN wget -q https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /tmp/miniconda.sh && \
-    bash /tmp/miniconda.sh -b -p /opt/conda && \
-    rm /tmp/miniconda.sh
+# Clone and build Halide from source with autoscheduler
+WORKDIR /opt
+RUN git clone --depth 1 --branch v15.0.0 https://github.com/halide/Halide.git && \
+    mkdir -p Halide/build && cd Halide/build && \
+    cmake .. -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DWITH_TESTS=OFF \
+        -DWITH_APPS=OFF \
+        -DWITH_TUTORIALS=OFF \
+        -DENABLE_AUTOSCHEDULER=ON \
+        -DAUTOSCHEDULER= Mullapudi2016 && \
+    ninja && \
+    ninja install && \
+    ldconfig
 
-# Install Halide with autoscheduler via conda
-RUN /opt/conda/bin/conda install -y -c conda-forge halide && \
-    /opt/conda/bin/conda clean -afy
-
-ENV PATH="/opt/conda/bin:$PATH" \
-    LD_LIBRARY_PATH="/opt/conda/lib:$LD_LIBRARY_PATH" \
-    CPATH="/opt/conda/include:$CPATH"
-
+# Build the experimental Halide frontend
 WORKDIR /opt/slambench/frontend
 COPY frontend/CMakeLists.txt /opt/slambench/frontend/
 COPY frontend/frontend_halide_harris_lk.cpp /opt/slambench/frontend/
 RUN rm -rf build && mkdir -p build && \
-    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
-    -DHALIDE_INCLUDE_DIR=/opt/conda/include \
-    -DHALIDE_LIBRARY=/opt/conda/lib/libHalide.so && \
+    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && \
     cmake --build build -j"$(nproc)" --target frontend_halide_harris_lk
 
 # Copy scripts/data into the image workspace last so script-only edits keep prior layers cached.

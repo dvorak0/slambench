@@ -13,14 +13,14 @@ add_executable(frontend_orb_bf frontend_orb_bf.cpp)
 target_link_libraries(frontend_orb_bf PRIVATE ${OpenCV_LIBS})
 
 # Halide is only needed for frontend_halide_harris_lk
-# Find it only when actually building that target
+# Find it in /usr/local (from source install) or system paths
 find_path(HALIDE_INCLUDE_DIR
   NAMES Halide.h
-  HINTS /opt/conda/include /usr/include /usr/local/include
+  HINTS /usr/local/include /usr/include
   PATH_SUFFIXES halide13 halide Halide)
 find_library(HALIDE_LIBRARY
   NAMES Halide libHalide.so
-  HINTS /opt/conda/lib /usr/lib /usr/lib/x86_64-linux-gnu /usr/local/lib)
+  HINTS /usr/local/lib /usr/lib /usr/lib/x86_64-linux-gnu)
 
 if(HALIDE_INCLUDE_DIR AND HALIDE_LIBRARY)
   message(STATUS "Found Halide: ${HALIDE_INCLUDE_DIR}, ${HALIDE_LIBRARY}")
