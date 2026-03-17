@@ -7,6 +7,7 @@ RUN apt-get update && \
         build-essential cmake ninja-build libgmp-dev \
         libgoogle-glog-dev libgflags-dev libatlas-base-dev libsuitesparse-dev libeigen3-dev \
         libboost-all-dev libtbb-dev libabsl-dev \
+        libhalide14-0-dev \
         git curl ca-certificates sudo && \
     rm -rf /var/lib/apt/lists/*
 

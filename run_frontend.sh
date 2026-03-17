@@ -63,16 +63,18 @@ if image_size and total_ms:
     tracked = re.search(r'tracked_points:\s*(\d+)', content)
     harris_ms = re.search(r'harris_ms:\s*([\d.]+)', content)
     lk_ms = re.search(r'lk_ms:\s*([\d.]+)', content)
-    if all([detected, tracked, harris_ms, lk_ms]):
+    halide_harris_ms = re.search(r'halide_harris_ms:\s*([\d.]+)', content)
+    if all([detected, tracked, harris_ms, lk_ms]) or all([detected, tracked, halide_harris_ms, lk_ms]):
         det = int(detected.group(1))
         trk = int(tracked.group(1))
-        h_ms = float(harris_ms.group(1))
+        h_ms = float(harris_ms.group(1)) if harris_ms else float(halide_harris_ms.group(1))
+        h_name = "harris_ms" if harris_ms else "halide_harris_ms"
         l_ms = float(lk_ms.group(1))
         success_rate = (trk / det * 100) if det > 0 else 0
         rows.append(["detected_points", f"{det}"])
         rows.append(["tracked_points", f"{trk}"])
         rows.append(["track_success_%", f"{success_rate:.1f}"])
-        rows.append(["harris_ms", f"{h_ms:.3f}"])
+        rows.append([h_name, f"{h_ms:.3f}"])
         rows.append(["lk_ms", f"{l_ms:.3f}"])
         rows.append(["total_ms", f"{tot:.3f}"])
         rows.append(["fps", f"{1000.0/tot:.1f}"])
@@ -159,6 +161,12 @@ run_one_frontend \
   "$WORKSPACE_BUILD_DIR/frontend_harris_lk" \
   "/opt/slambench/frontend/build/frontend_harris_lk" \
   "$ROOT_DIR/frontend_harris_lk.log"
+
+run_one_frontend \
+  "halide_harris_lk" \
+  "$WORKSPACE_BUILD_DIR/frontend_halide_harris_lk" \
+  "/opt/slambench/frontend/build/frontend_halide_harris_lk" \
+  "$ROOT_DIR/frontend_halide_harris_lk.log"
 
 run_one_frontend \
   "orb_bf" \
