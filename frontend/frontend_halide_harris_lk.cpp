@@ -70,71 +70,47 @@ static Halide::Buffer<float> compute_halide_harris(const cv::Mat& gray, bool use
   out(x, y) = det(x, y) - 0.04f * trace(x, y) * trace(x, y);
 
   if (use_autoschedule) {
-    // Use a high-performance schedule similar to Halide tutorial examples
-    // This achieves ~0.92ms on Intel i9-9960X with 16 threads
+    // Simplified high-performance schedule: tile + vectorize + parallel
     Var yi("yi");
-    const int vec = 8;  // Fixed vector width for compatibility
+    const int vec = 8;
     const int tile_size = 32;
     
-    // Main output: parallel y, vectorize x
+    // Tile y and parallelize
     out.split(y, y, yi, tile_size);
     out.parallel(y);
     out.vectorize(x, vec);
     
-    // Compute intermediate functions at inner tile level for better cache reuse
-    // Use store_at to reduce memory traffic
-    in_f.store_at(out, y);
+    // All intermediate Funcs: compute at inner tile level
     in_f.compute_at(out, yi);
     in_f.vectorize(x, vec);
     
-    Ix.store_at(out, y);
     Ix.compute_at(out, yi);
     Ix.vectorize(x, vec);
     
-    Iy.store_at(out, y);
     Iy.compute_at(out, yi);
     Iy.vectorize(x, vec);
     
-    // Fuse Ix and Iy together for better performance
-    Ix.compute_with(Iy, x);
-    
-    Ixx.store_at(out, y);
     Ixx.compute_at(out, yi);
     Ixx.vectorize(x, vec);
     
-    Iyy.store_at(out, y);
     Iyy.compute_at(out, yi);
     Iyy.vectorize(x, vec);
     
-    Ixy.store_at(out, y);
     Ixy.compute_at(out, yi);
     Ixy.vectorize(x, vec);
     
-    // Fuse Ixx, Iyy, Ixy together
-    Ixx.compute_with(Iyy, x);
-    Ixx.compute_with(Ixy, x);
-    
-    Sxx.store_at(out, y);
     Sxx.compute_at(out, yi);
     Sxx.vectorize(x, vec);
     
-    Syy.store_at(out, y);
     Syy.compute_at(out, yi);
     Syy.vectorize(x, vec);
     
-    Sxy.store_at(out, y);
     Sxy.compute_at(out, yi);
     Sxy.vectorize(x, vec);
     
-    // Fuse Sxx, Syy, Sxy together
-    Sxx.compute_with(Syy, x);
-    Sxx.compute_with(Sxy, x);
-    
-    det.store_at(out, y);
     det.compute_at(out, yi);
     det.vectorize(x, vec);
     
-    trace.store_at(out, y);
     trace.compute_at(out, yi);
     trace.vectorize(x, vec);
   } else {
