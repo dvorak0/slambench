@@ -88,7 +88,7 @@ RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && \
 # Install Halide from source (includes autoscheduler) - for C++ development
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-        ninja-build llvm-dev libclang-dev clang lld && \
+        ninja-build llvm-14-dev libclang-14-dev clang-14 lld-14 && \
     rm -rf /var/lib/apt/lists/*
 
 # Clone and build Halide from source with autoscheduler
@@ -101,7 +101,10 @@ RUN git clone --depth 1 --branch v15.0.0 https://github.com/halide/Halide.git &&
         -DWITH_APPS=OFF \
         -DWITH_TUTORIALS=OFF \
         -DENABLE_AUTOSCHEDULER=ON \
-        -DAUTOSCHEDULER=Mullapudi2016 && \
+        -DAUTOSCHEDULER=Mullapudi2016 \
+        -DLLVM_DIR=/usr/lib/llvm-14/lib/cmake/llvm \
+        -DClang_DIR=/usr/lib/llvm-14/lib/cmake/clang \
+        -DLLD_DIR=/usr/lib/llvm-14/lib/cmake/lld && \
     ninja && \
     ninja install && \
     ldconfig
