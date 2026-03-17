@@ -55,19 +55,20 @@ RUN mkdir -p build && cd build && \
     cmake .. -DCMAKE_BUILD_TYPE=Release && \
     make -j"$(nproc)" msckf_runner msckf_runner_rr msckf_runner_rc msckf_runner_cr msckf_runner_cc
 
-# Install frontend-only deps late so backend image layers stay cacheable when frontend changes
+# Install stable frontend deps late so backend image layers stay cacheable when frontend changes
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-        libopencv-dev \
-        libhalide13-0-dev && \
+        libopencv-dev && \
     rm -rf /var/lib/apt/lists/*
 
-# Build frontend benchmarks
+# Build stable frontend benchmarks first; keep Halide out of this layer for faster iteration.
 WORKDIR /opt/slambench/frontend
-COPY frontend/ /opt/slambench/frontend/
+COPY frontend/CMakeLists.txt /opt/slambench/frontend/
+COPY frontend/frontend_harris_lk.cpp /opt/slambench/frontend/
+COPY frontend/frontend_orb_bf.cpp /opt/slambench/frontend/
 RUN mkdir -p build && cd build && \
-    cmake .. -DCMAKE_BUILD_TYPE=Release && \
-    make -j"$(nproc)"
+    cmake .. -DCMAKE_BUILD_TYPE=Release -DENABLE_HALIDE_FRONTEND=OFF && \
+    make -j"$(nproc)" frontend_harris_lk frontend_orb_bf
 
 # Install prettytable for summary tables
 RUN python3 -m pip install --no-cache-dir prettytable
@@ -83,6 +84,16 @@ WORKDIR /opt/slambench/msckf_c
 RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && \
     cmake --build build -j"$(nproc)" --target \
       msckf_runner msckf_runner_rr msckf_runner_rc msckf_runner_cr msckf_runner_cc msckf_runner_openblas
+
+# Install Halide and build the experimental Halide frontend very late so Halide-only edits don't invalidate earlier layers.
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        libhalide13-0-dev && \
+    rm -rf /var/lib/apt/lists/*
+WORKDIR /opt/slambench/frontend
+COPY frontend/frontend_halide_harris_lk.cpp /opt/slambench/frontend/
+RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DENABLE_HALIDE_FRONTEND=ON && \
+    cmake --build build -j"$(nproc)" --target frontend_halide_harris_lk
 
 # Copy scripts/data into the image workspace last so script-only edits keep prior layers cached.
 WORKDIR /workspace
