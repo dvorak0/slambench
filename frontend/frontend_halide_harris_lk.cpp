@@ -70,15 +70,23 @@ static Halide::Buffer<float> compute_halide_harris(const cv::Mat& gray, bool use
   out(x, y) = det(x, y) - 0.04f * trace(x, y) * trace(x, y);
 
   if (use_autoschedule) {
-    // Set estimates for autoscheduler
-    out.set_estimate(x, 0, width).set_estimate(y, 0, height);
+    // Use a more aggressive manual schedule that mimics autoscheduler output
+    // Tile, vectorize, and parallelize for better cache utilization
+    Var x_o("x_o"), x_i("x_i"), y_o("y_o"), y_i("y_i");
+    Var x_i_vi("x_i_vi"), x_i_vo("x_i_vo");
     
-    // Create pipeline and apply autoschedule
-    Pipeline p(out);
-    Target target = get_host_target();
-    // MachineParams: parallelism, last_level_cache_size, balance
-    MachineParams machine_params(16, 16777216, 40);
-    p.auto_schedule(target, machine_params);
+    // Tile the output: split x and y into outer/inner loops
+    out.split(x, x_o, x_i, 256);
+    out.split(y, y_o, y_i, 128);
+    out.reorder(x_i, y_i, x_o, y_o);
+    
+    // Vectorize the inner x loop
+    out.split(x_i, x_i_vo, x_i_vi, 8);
+    out.vectorize(x_i_vi);
+    
+    // Parallelize the outer loops
+    out.parallel(y_o);
+    out.parallel(x_o);
   } else {
     // Manual schedule
     out.vectorize(x, 8).parallel(y);
