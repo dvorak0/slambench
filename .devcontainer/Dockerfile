@@ -10,8 +10,8 @@ RUN apt-get update && \
         git curl ca-certificates sudo && \
     rm -rf /var/lib/apt/lists/*
 
-# Upgrade pip and install a newer CMake (Halide's CMake package requires >= 3.28)
-RUN python3 -m pip install --no-cache-dir --upgrade pip cmake
+# Upgrade pip
+RUN python3 -m pip install --no-cache-dir --upgrade pip
 
 # Provide SCM version hints (build context lacks .git metadata)
 ENV SETUPTOOLS_SCM_PRETEND_VERSION_FOR_SYMFORCE=0.0.0 \
@@ -85,9 +85,9 @@ RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && \
     cmake --build build -j"$(nproc)" --target \
       msckf_runner msckf_runner_rr msckf_runner_rc msckf_runner_cr msckf_runner_cc msckf_runner_openblas
 
-# Install Halide binary wheel (recommended by Halide README even for C++ usage).
-# CMake can find Halide from the same Python environment.
-RUN python3 -m pip install --no-cache-dir halide
+# Install Halide binary wheel and newer CMake in the late experiment layer only.
+# This keeps earlier heavy build layers cached.
+RUN python3 -m pip install --no-cache-dir cmake halide
 
 # Build the experimental Halide frontend
 WORKDIR /opt/slambench/frontend
