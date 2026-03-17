@@ -85,14 +85,30 @@ RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && \
     cmake --build build -j"$(nproc)" --target \
       msckf_runner msckf_runner_rr msckf_runner_rc msckf_runner_cr msckf_runner_cc msckf_runner_openblas
 
-# Install Halide and build the experimental Halide frontend very late so Halide-only edits don't invalidate earlier layers.
+# Install Halide via conda (includes autoscheduler) and build the experimental Halide frontend very late so Halide-only edits don't invalidate earlier layers.
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-        libhalide13-0-dev && \
+        wget libarchive13 && \
     rm -rf /var/lib/apt/lists/*
+
+# Install Miniconda
+RUN wget -q https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /tmp/miniconda.sh && \
+    bash /tmp/miniconda.sh -b -p /opt/conda && \
+    rm /tmp/miniconda.sh
+
+# Install Halide with autoscheduler via conda
+RUN /opt/conda/bin/conda install -y -c conda-forge halide && \
+    /opt/conda/bin/conda clean -afy
+
+ENV PATH="/opt/conda/bin:$PATH" \
+    LD_LIBRARY_PATH="/opt/conda/lib:$LD_LIBRARY_PATH" \
+    CPATH="/opt/conda/include:$CPATH"
+
 WORKDIR /opt/slambench/frontend
 COPY frontend/frontend_halide_harris_lk.cpp /opt/slambench/frontend/
-RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && \
+RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
+    -DHALIDE_INCLUDE_DIR=/opt/conda/include \
+    -DHALIDE_LIBRARY=/opt/conda/lib/libHalide.so && \
     cmake --build build -j"$(nproc)" --target frontend_halide_harris_lk
 
 # Copy scripts/data into the image workspace last so script-only edits keep prior layers cached.
