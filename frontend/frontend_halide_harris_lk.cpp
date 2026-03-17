@@ -19,7 +19,7 @@ static double ms_since(const Clock::time_point& start, const Clock::time_point& 
   return std::chrono::duration<double, std::milli>(end - start).count();
 }
 
-static Halide::Buffer<float> compute_halide_harris(const cv::Mat& gray) {
+static Halide::Buffer<float> compute_halide_harris(const cv::Mat& gray, bool use_autoschedule) {
   using namespace Halide;
 
   const int width = gray.cols;
@@ -69,7 +69,21 @@ static Halide::Buffer<float> compute_halide_harris(const cv::Mat& gray) {
   trace(x, y) = Sxx(x, y) + Syy(x, y);
   out(x, y) = det(x, y) - 0.04f * trace(x, y) * trace(x, y);
 
-  out.vectorize(x, 8).parallel(y);
+  if (use_autoschedule) {
+    // Set estimates for autoscheduler
+    out.estimate(x, 0, width).estimate(y, 0, height);
+    
+    // Create pipeline and apply autoschedule
+    Pipeline p(out);
+    Target target = get_host_target();
+    // MachineParams: parallelism, last_level_cache_size, balance
+    MachineParams machine_params(16, 16777216, 40);
+    p.auto_schedule(target, machine_params);
+  } else {
+    // Manual schedule
+    out.vectorize(x, 8).parallel(y);
+  }
+  
   return out.realize({width, height});
 }
 
@@ -167,9 +181,10 @@ int main(int argc, char** argv) {
   const int warmup_runs = 3;
   const int timed_runs = 5;
   double halide_response_ms = 0.0;
+  const bool use_autoschedule = true;
   for (int i = 0; i < warmup_runs + timed_runs; ++i) {
     const auto t3_run_start = Clock::now();
-    response = compute_halide_harris(gray0);
+    response = compute_halide_harris(gray0, use_autoschedule);
     const auto t3_run_end = Clock::now();
     if (i >= warmup_runs) {
       halide_response_ms = ms_since(t3_run_start, t3_run_end);
