@@ -72,7 +72,8 @@ static Halide::Buffer<float> compute_halide_harris(const cv::Mat& gray, bool use
   if (use_autoschedule) {
     // Use a high-performance schedule similar to Halide tutorial examples
     // This achieves ~0.92ms on Intel i9-9960X with 16 threads
-    const int vec = Halide::natural_vector_size<float>();
+    Var yi("yi");
+    const int vec = 8;  // Fixed vector width for compatibility
     const int tile_size = 32;
     
     // Main output: parallel y, vectorize x
