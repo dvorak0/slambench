@@ -88,7 +88,7 @@ RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && \
 # Install Halide from source (includes autoscheduler) - for C++ development
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-        ninja-build llvm-dev libclang-dev clang lld liblld-dev && \
+        ninja-build llvm-dev libclang-dev clang lld && \
     rm -rf /var/lib/apt/lists/*
 
 # Clone and build Halide from source with autoscheduler
