@@ -1,0 +1,25 @@
+FROM slambench-local:dev
+
+USER root
+WORKDIR /opt
+
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        git ninja-build llvm-dev libclang-dev clang && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN git clone --depth 1 --branch v15.0.0 https://github.com/halide/Halide.git && \
+    mkdir -p /opt/Halide/build && cd /opt/Halide/build && \
+    cmake .. -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DWITH_TESTS=OFF \
+        -DWITH_APPS=OFF \
+        -DWITH_TUTORIALS=OFF \
+        -DTARGET_WEBASSEMBLY=OFF \
+        -DWITH_PYTHON_BINDINGS=OFF && \
+    ninja autoschedulers && \
+    ninja install && \
+    ldconfig
+
+WORKDIR /workspace
+ENTRYPOINT ["/bin/bash"]
