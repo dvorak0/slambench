@@ -61,13 +61,13 @@ RUN apt-get update && \
         libopencv-dev && \
     rm -rf /var/lib/apt/lists/*
 
-# Build stable frontend benchmarks first; keep Halide out of this layer for faster iteration.
+# Build stable frontend benchmarks first.
 WORKDIR /opt/slambench/frontend
 COPY frontend/CMakeLists.txt /opt/slambench/frontend/
 COPY frontend/frontend_harris_lk.cpp /opt/slambench/frontend/
 COPY frontend/frontend_orb_bf.cpp /opt/slambench/frontend/
 RUN mkdir -p build && cd build && \
-    cmake .. -DCMAKE_BUILD_TYPE=Release -DENABLE_HALIDE_FRONTEND=OFF && \
+    cmake .. -DCMAKE_BUILD_TYPE=Release && \
     make -j"$(nproc)" frontend_harris_lk frontend_orb_bf
 
 # Install prettytable for summary tables
@@ -92,7 +92,7 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 WORKDIR /opt/slambench/frontend
 COPY frontend/frontend_halide_harris_lk.cpp /opt/slambench/frontend/
-RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DENABLE_HALIDE_FRONTEND=ON && \
+RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && \
     cmake --build build -j"$(nproc)" --target frontend_halide_harris_lk
 
 # Copy scripts/data into the image workspace last so script-only edits keep prior layers cached.
