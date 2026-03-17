@@ -101,7 +101,7 @@ RUN git clone --depth 1 --branch v15.0.0 https://github.com/halide/Halide.git &&
         -DWITH_APPS=OFF \
         -DWITH_TUTORIALS=OFF \
         -DENABLE_AUTOSCHEDULER=ON \
-        -DAUTOSCHEDULER= Mullapudi2016 && \
+        -DAUTOSCHEDULER=Mullapudi2016 && \
     ninja && \
     ninja install && \
     ldconfig
