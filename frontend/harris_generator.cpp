@@ -8,8 +8,8 @@ using namespace Halide;
 
 class Harris : public Generator<Harris> {
 public:
-    Input<Buffer<uint8_t, 2>> input{"input"};
-    Output<Buffer<float, 2>> output{"output"};
+    Input<Buffer<uint8_t, 2>> input{"input", {752, 480}};  // Default size
+    Output<Buffer<float, 2>> output{"output", {752, 480}};
     
     void generate() {
         Var x("x"), y("y");
