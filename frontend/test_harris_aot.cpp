@@ -1,4 +1,4 @@
-// Simple AOT Harris - debug version
+// Simple AOT Harris
 #include "Halide.h"
 #include <iostream>
 #include <chrono>
@@ -11,19 +11,19 @@ int main(int argc, char** argv) {
     const int W = 752;
     const int H = 480;
     
-    // Use Image for input
-    Image<uint8_t> input(W, H);
+    // Use Buffer for input
+    Buffer<uint8_t> input(W, H);
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
             input(x, y) = (x + y) % 256;
         }
     }
     
-    Image<float> output(W, H);
+    Buffer<float> output(W, H);
     
     Var x("x"), y("y");
     
-    // Harris algorithm - simple version
+    // Harris algorithm
     Func in_f("in_f");
     in_f(x, y) = BoundaryConditions::repeat_edge(input)(x, y);
     
