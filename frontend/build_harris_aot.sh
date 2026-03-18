@@ -6,6 +6,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HALIDE_ROOT=/usr/local/lib/python3.10/dist-packages/halide
+export LD_LIBRARY_PATH=$HALIDE_ROOT/lib64:$LD_LIBRARY_PATH
 
 cd $SCRIPT_DIR
 
