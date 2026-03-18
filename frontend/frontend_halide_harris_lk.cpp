@@ -181,13 +181,18 @@ int main(int argc, char** argv) {
   const int timed_runs = 5;
   double halide_response_ms = 0.0;
   const bool use_autoschedule = true;
-  for (int i = 0; i < warmup_runs + timed_runs; ++i) {
-    const auto t3_run_start = Clock::now();
-    response = compute_halide_harris(gray0, use_autoschedule);
-    const auto t3_run_end = Clock::now();
-    if (i >= warmup_runs) {
-      halide_response_ms = ms_since(t3_run_start, t3_run_end);
+  try {
+    for (int i = 0; i < warmup_runs + timed_runs; ++i) {
+      const auto t3_run_start = Clock::now();
+      response = compute_halide_harris(gray0, use_autoschedule);
+      const auto t3_run_end = Clock::now();
+      if (i >= warmup_runs) {
+        halide_response_ms = ms_since(t3_run_start, t3_run_end);
+      }
     }
+  } catch (const std::exception& e) {
+    std::cerr << "Halide autoschedule failed: " << e.what() << "\n";
+    return 1;
   }
 
   const auto t3_mid = Clock::now();
