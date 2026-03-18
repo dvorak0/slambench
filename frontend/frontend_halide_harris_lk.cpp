@@ -22,7 +22,10 @@ static double ms_since(const Clock::time_point& start, const Clock::time_point& 
 // Global pipeline for Halide Harris (built once)
 struct HalideHarrisPipeline {
   Halide::Func out;
+  Halide::Target target;
+  Halide::Buffer<float> output_buf;
   bool built = false;
+  bool compiled = false;
   
   void build(const cv::Mat& gray) {
     if (built) return;
@@ -99,19 +102,26 @@ struct HalideHarrisPipeline {
     
     Ix.compute_with(Iy, x);
     
-    // Force JIT compilation now
-    Halide::Buffer<float> output(width, height);
-    out.realize(output);
+    // Pre-allocate output buffer
+    output_buf = Halide::Buffer<float>(width, height);
+    
+    // Get JIT target
+    target = Halide::get_jit_target_from_environment();
     
     built = true;
   }
   
+  // Explicitly compile the pipeline (call this before timing loop)
+  void compile() {
+    if (compiled) return;
+    out.realize(output_buf);
+    compiled = true;
+  }
+  
   Halide::Buffer<float> run(const cv::Mat& gray) {
-    const int width = gray.cols;
-    const int height = gray.rows;
-    Halide::Buffer<float> output(width, height);
-    out.realize(output);
-    return output;
+    // Re-use the pre-allocated buffer
+    out.realize(output_buf);
+    return output_buf;
   }
 };
 
@@ -315,8 +325,8 @@ int main(int argc, char** argv) {
   static HalideHarrisPipeline pipeline;
   pipeline.build(gray0);
   
-  // First run (might include compilation)
-  response = pipeline.run(gray0);
+  // Explicitly compile the pipeline (JIT) BEFORE timing
+  pipeline.compile();
   
   // Warmup runs
   for (int i = 0; i < warmup_runs; ++i) {
@@ -331,7 +341,6 @@ int main(int argc, char** argv) {
     const auto t3_run_end = Clock::now();
     double this_run = ms_since(t3_run_start, t3_run_end);
     halide_response_ms += this_run;
-    std::cerr << "Halide run " << i << ": " << this_run << " ms" << std::endl;
   }
   halide_response_ms /= timed_runs;
 
