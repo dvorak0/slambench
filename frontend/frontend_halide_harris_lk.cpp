@@ -1,7 +1,7 @@
 // Halide Harris LK Frontend Test
 // Uses Halide Harris (auto-scheduled) + OpenCV Optical Flow
 
-#include "halide_harris_auto.h"
+#include "harris_auto.h"
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/video/tracking.hpp>
