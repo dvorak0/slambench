@@ -25,7 +25,7 @@ static Halide::Buffer<float> compute_halide_harris(const cv::Mat& gray, bool use
   const int width = gray.cols;
   const int height = gray.rows;
 
-  // Keep input as uint8 (no float conversion at input)
+  // Input as uint8, then convert to float grayscale
   Halide::Buffer<uint8_t> input(width, height);
   for (int y = 0; y < height; ++y) {
     for (int x = 0; x < width; ++x) {
@@ -37,26 +37,30 @@ static Halide::Buffer<float> compute_halide_harris(const cv::Mat& gray, bool use
   Func in_f("in_f");
   in_f(x, y) = BoundaryConditions::repeat_edge(input)(x, y);
 
-  // Compute gradients as int8 (scaled to fit in [-127, 127])
-  // Sobel weights scaled down to keep output in int8 range
-  // Ix: horizontal gradient, scale by 1/4 to fit in int8
-  Func Ix("Ix");
-  Ix(x, y) = cast<int8_t>((in_f(x + 1, y) - in_f(x - 1, y)));
+  // Step 1: Convert to grayscale (matching official Halide Harris)
+  Func gray_f("gray");
+  gray_f(x, y) = in_f(x, y);
 
-  // Iy: vertical gradient
+  // Step 2: Sobel gradients with 1/12 scaling (matching official Halide Harris)
   Func Iy("Iy");
-  Iy(x, y) = cast<int8_t>((in_f(x, y + 1) - in_f(x, y - 1)));
+  Iy(x, y) = gray_f(x - 1, y - 1) * (-1.0f / 12.0f) + gray_f(x - 1, y + 1) * (1.0f / 12.0f) +
+             gray_f(x, y - 1) * (-2.0f / 12.0f) + gray_f(x, y + 1) * (2.0f / 12.0f) +
+             gray_f(x + 1, y - 1) * (-1.0f / 12.0f) + gray_f(x + 1, y + 1) * (1.0f / 12.0f);
 
-  // Covariance: dx*dx, dx*dy, dy*dy - need int16 to avoid overflow (int8*int8 can overflow)
-  // Scale down by 4 to fit in int16: max is 127*127/4 = 4033, fits in int16
+  Func Ix("Ix");
+  Ix(x, y) = gray_f(x - 1, y - 1) * (-1.0f / 12.0f) + gray_f(x + 1, y - 1) * (1.0f / 12.0f) +
+             gray_f(x - 1, y) * (-2.0f / 12.0f) + gray_f(x + 1, y) * (2.0f / 12.0f) +
+             gray_f(x - 1, y + 1) * (-1.0f / 12.0f) + gray_f(x + 1, y + 1) * (1.0f / 12.0f);
+
+  // Step 3: Covariance
   Func Ixx("Ixx");
-  Ixx(x, y) = cast<int16_t>(Ix(x, y) * Ix(x, y) / 4);
+  Ixx(x, y) = Ix(x, y) * Ix(x, y);
   Func Iyy("Iyy");
-  Iyy(x, y) = cast<int16_t>(Iy(x, y) * Iy(x, y) / 4);
+  Iyy(x, y) = Iy(x, y) * Iy(x, y);
   Func Ixy("Ixy");
-  Ixy(x, y) = cast<int16_t>(Ix(x, y) * Iy(x, y) / 4);
+  Ixy(x, y) = Ix(x, y) * Iy(x, y);
 
-  // Box filter (3x3 sum) as int32 (9 * 4033 = 36297, fits in int32)
+  // Step 4: Box filter (3x3 sum) - matching official Halide Harris
   Func Sxx("Sxx"), Syy("Syy"), Sxy("Sxy");
   Sxx(x, y) = Ixx(x - 1, y - 1) + Ixx(x - 1, y) + Ixx(x - 1, y + 1) +
               Ixx(x, y - 1) + Ixx(x, y) + Ixx(x, y + 1) +
@@ -68,94 +72,45 @@ static Halide::Buffer<float> compute_halide_harris(const cv::Mat& gray, bool use
               Ixy(x, y - 1) + Ixy(x, y) + Ixy(x, y + 1) +
               Ixy(x + 1, y - 1) + Ixy(x + 1, y) + Ixy(x + 1, y + 1);
 
-  // Only convert to float at the final Harris response
+  // Step 5: Harris response
   Func det("det"), trace("trace"), out("out");
-  det(x, y) = cast<float>(Sxx(x, y) * Syy(x, y) - Sxy(x, y) * Sxy(x, y));
-  trace(x, y) = cast<float>(Sxx(x, y) + Syy(x, y));
+  det(x, y) = Sxx(x, y) * Syy(x, y) - Sxy(x, y) * Sxy(x, y);
+  trace(x, y) = Sxx(x, y) + Syy(x, y);
   out(x, y) = det(x, y) - 0.04f * trace(x, y) * trace(x, y);
 
+  // Schedule - matching official Halide Harris
   if (use_autoschedule) {
-    // Simplified high-performance schedule: tile + vectorize + parallel
+    // Autoscheduler handles it
     Var yi("yi");
     const int vec = 8;
     const int tile_size = 32;
-    
-    // Tile y and parallelize
     out.split(y, y, yi, tile_size);
     out.parallel(y);
     out.vectorize(x, vec);
-    
-    // All intermediate Funcs: compute at inner tile level
-    in_f.compute_at(out, yi);
-    in_f.vectorize(x, vec);
-    
-    Ix.compute_at(out, yi);
-    Ix.vectorize(x, vec);
-    
-    Iy.compute_at(out, yi);
-    Iy.vectorize(x, vec);
-    
-    Ixx.compute_at(out, yi);
-    Ixx.vectorize(x, vec);
-    
-    Iyy.compute_at(out, yi);
-    Iyy.vectorize(x, vec);
-    
-    Ixy.compute_at(out, yi);
-    Ixy.vectorize(x, vec);
-    
-    Sxx.compute_at(out, yi);
-    Sxx.vectorize(x, vec);
-    
-    Syy.compute_at(out, yi);
-    Syy.vectorize(x, vec);
-    
-    Sxy.compute_at(out, yi);
-    Sxy.vectorize(x, vec);
-    
-    det.compute_at(out, yi);
-    det.vectorize(x, vec);
-    
-    trace.compute_at(out, yi);
-    trace.vectorize(x, vec);
   } else {
-    // Manual schedule: store_at + compute_at + compute_with
+    // Manual schedule - matching official Halide Harris exactly
     Var yi("yi");
     const int vec = 8;
-    const int tile_size = 32;
     
-    out.split(y, y, yi, tile_size);
-    out.parallel(y);
-    out.vectorize(x, vec);
+    out.split(y, y, yi, 32)
+        .parallel(y)
+        .vectorize(x, vec);
     
-    // Input: store at outer tile, compute at inner tile
-    in_f.store_at(out, y).compute_at(out, yi).vectorize(x, vec);
+    gray_f.store_at(out, y)
+        .compute_at(out, yi)
+        .vectorize(x, vec);
     
-    // Gradients: store at outer tile, compute at inner tile, compute_with for fusion
-    Ix.store_at(out, y).compute_at(out, yi).vectorize(x, vec);
-    Iy.store_at(out, y).compute_at(out, yi).vectorize(x, vec);
+    Ix.store_at(out, y)
+        .compute_at(out, yi)
+        .vectorize(x, vec);
+    
+    Iy.store_at(out, y)
+        .compute_at(out, yi)
+        .vectorize(x, vec);
+    
     Ix.compute_with(Iy, x);
-    
-    // Covariance
-    Ixx.store_at(out, y).compute_at(out, yi).vectorize(x, vec);
-    Iyy.store_at(out, y).compute_at(out, yi).vectorize(x, vec);
-    Ixy.store_at(out, y).compute_at(out, yi).vectorize(x, vec);
-    Ixx.compute_with(Iyy, x);
-    Ixx.compute_with(Ixy, x);
-    
-    // Box sums
-    Sxx.store_at(out, y).compute_at(out, yi).vectorize(x, vec);
-    Syy.store_at(out, y).compute_at(out, yi).vectorize(x, vec);
-    Sxy.store_at(out, y).compute_at(out, yi).vectorize(x, vec);
-    Sxx.compute_with(Syy, x);
-    Sxx.compute_with(Sxy, x);
-    
-    // Final
-    det.store_at(out, y).compute_at(out, yi).vectorize(x, vec);
-    trace.store_at(out, y).compute_at(out, yi).vectorize(x, vec);
-    det.compute_with(trace, x);
   }
-  
+
   return out.realize({width, height});
 }
 
