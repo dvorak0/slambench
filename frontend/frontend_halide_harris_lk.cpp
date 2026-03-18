@@ -76,33 +76,28 @@ int main(int argc, char** argv) {
   double harris_ms = ms_since(harris_start, harris_end);
 
   // ========================================
-  // Select top corners (like goodFeaturesToTrack)
+  // Select top corners using goodFeaturesToTrack (same as OpenCV)
   // ========================================
-  const int max_corners = 500;
   std::vector<cv::Point2f> points0;
-  points0.reserve(max_corners);
-
-  float min_distance = 10.0;
-  for (int y = 0; y < H; y += 10) {
-    for (int x = 0; x < W; x += 10) {
-      float response = harris_response(x, y);
-      if (response > 0.01) {
-        // Check distance to existing points
-        bool too_close = false;
-        for (const auto& p : points0) {
-          float dx = x - p.x;
-          float dy = y - p.y;
-          if (dx*dx + dy*dy < min_distance*min_distance) {
-            too_close = true;
-            break;
-          }
-        }
-        if (!too_close && points0.size() < max_corners) {
-          points0.emplace_back(x, y);
-        }
-      }
+  
+  // Convert Halide response to OpenCV mat for goodFeaturesToTrack
+  cv::Mat harris_mat(H, W, CV_32FC1);
+  for (int y = 0; y < H; y++) {
+    for (int x = 0; x < W; x++) {
+      harris_mat.at<float>(y, x) = harris_response(x, y);
     }
   }
+  
+  cv::goodFeaturesToTrack(
+      harris_mat,
+      points0,
+      500,
+      0.01,
+      10.0,
+      cv::Mat(),
+      3,
+      true,
+      0.04);
 
   // ========================================
   // Optical Flow (OpenCV)
