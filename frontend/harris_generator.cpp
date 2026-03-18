@@ -7,11 +7,15 @@ using namespace Halide;
 
 class Harris : public Generator<Harris> {
 public:
-    // Inputs and outputs
     Input<Buffer<uint8_t, 2>> input{"input"};
     Output<Buffer<float, 2>> output{"output"};
     
     void generate() {
+        Var x("x"), y("y");
+        
+        // Provide estimates for autoscheduler
+        input.set_estimates({{0, 752}, {0, 480}});
+        output.set_estimates({{0, 752}, {0, 480}});
         Var x("x"), y("y");
         
         // Boundary conditions
