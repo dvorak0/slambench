@@ -39,6 +39,7 @@ echo "Generated: harris_manual.a, harris_manual.h"
 echo "[3/3] Building test runner..."
 
 cat > harris_aot_test.cpp << 'EOF'
+#include <Halide.h>
 #include "harris_manual.h"
 #include <opencv2/opencv.hpp>
 #include <iostream>
