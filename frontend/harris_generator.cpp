@@ -43,6 +43,10 @@ public:
         
         // Harris response
         output(x, y) = (Sxx(x,y)*Syy(x,y) - Sxy(x,y)*Sxy(x,y)) - 0.04f * (Sxx(x,y) + Syy(x,y)) * (Sxx(x,y) + Syy(x,y));
+        
+        // Estimates for auto-scheduler
+        output.set_estimate(x, 0, 752);
+        output.set_estimate(y, 0, 480);
     }
     
     void schedule() {
