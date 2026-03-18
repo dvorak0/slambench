@@ -341,7 +341,7 @@ int main(int argc, char** argv) {
     const auto t3_run_end = Clock::now();
     double this_run = ms_since(t3_run_start, t3_run_end);
     halide_response_ms += this_run;
-    printf("Run %d: %.3f ms\n", i, this_run);
+    std::cerr << "Halide run " << i << ": " << this_run << " ms" << std::endl;
   }
   halide_response_ms /= timed_runs;
 
