@@ -15,7 +15,7 @@ echo "HALIDE AOT Harris Generator"
 echo "=========================================="
 
 # Step 1: Compile generator
-echo "[1/5] Compiling Harris generator..."
+echo "[1/3] Compiling Harris generator..."
 g++ harris_generator.cpp \
     $HALIDE_SRC/tools/GenGen.cpp \
     -g -std=c++17 -fno-rtti \
@@ -25,31 +25,19 @@ g++ harris_generator.cpp \
     -lHalide -lpthread -ldl \
     -o harris_generator
 
-# Step 2: Generate AOT (no schedule - baseline)
-echo "[2/5] Generating AOT (no schedule)..."
-./harris_generator \
-    -o . \
-    -g harris \
-    -f harris_none \
-    -e static_library,h,schedule \
-    target=host
-
-echo "Generated: harris_none.a, harris_none.h"
-
-# Step 3: Generate AOT (manual schedule via command line)
-echo "[3/5] Generating AOT (manual schedule)..."
+# Step 2: Generate AOT (manual schedule - default in generator)
+echo "[2/3] Generating AOT (manual schedule)..."
 ./harris_generator \
     -o . \
     -g harris \
     -f harris_manual \
     -e static_library,h,schedule \
-    target=host \
-    -s "Var yi; output.split(y, y, yi, 32).parallel(y).vectorize(x, 8)"
+    target=host
 
 echo "Generated: harris_manual.a, harris_manual.h"
 
-# Step 4: Generate AOT (auto schedule)
-echo "[4/5] Generating AOT (auto schedule)..."
+# Step 3: Generate AOT (auto schedule)
+echo "[3/3] Generating AOT (auto schedule)..."
 ./harris_generator \
     -o . \
     -g harris \
@@ -64,5 +52,6 @@ echo "[4/5] Generating AOT (auto schedule)..."
 
 echo "Generated: harris_auto.a, harris_auto.h"
 
-echo "[5/5] Done!"
+echo "=========================================="
+echo "Done!"
 echo "=========================================="
