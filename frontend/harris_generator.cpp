@@ -16,7 +16,6 @@ public:
         // Provide estimates for autoscheduler
         input.set_estimates({{0, 752}, {0, 480}});
         output.set_estimates({{0, 752}, {0, 480}});
-        Var x("x"), y("y");
         
         // Boundary conditions
         Func in_f("in_f");
