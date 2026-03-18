@@ -76,28 +76,47 @@ int main(int argc, char** argv) {
   double harris_ms = ms_since(harris_start, harris_end);
 
   // ========================================
-  // Select top corners using goodFeaturesToTrack (same as OpenCV)
+  // Feature selection - similar to goodFeaturesToTrack
   // ========================================
   std::vector<cv::Point2f> points0;
   
-  // Convert Halide response to OpenCV mat for goodFeaturesToTrack
-  cv::Mat harris_mat(H, W, CV_32FC1);
+  // Collect all corners above threshold
+  struct Corner {
+    float x, y, response;
+  };
+  std::vector<Corner> corners;
+  float qualityLevel = 0.01;
+  float minDistance = 10.0;
+  
   for (int y = 0; y < H; y++) {
     for (int x = 0; x < W; x++) {
-      harris_mat.at<float>(y, x) = harris_response(x, y);
+      float r = harris_response(x, y);
+      if (r > qualityLevel) {
+        corners.push_back({(float)x, (float)y, r});
+      }
     }
   }
   
-  cv::goodFeaturesToTrack(
-      harris_mat,
-      points0,
-      500,
-      0.01,
-      10.0,
-      cv::Mat(),
-      3,
-      true,
-      0.04);
+  // Sort by response (descending)
+  std::sort(corners.begin(), corners.end(), 
+             [](const Corner& a, const Corner& b) { return a.response > b.response; });
+  
+  // Non-maximum suppression - keep points with min distance
+  for (const auto& c : corners) {
+    bool tooClose = false;
+    for (const auto& p : points0) {
+      float dx = c.x - p.x;
+      float dy = c.y - p.y;
+      if (dx*dx + dy*dy < minDistance*minDistance) {
+        tooClose = true;
+        break;
+      }
+    }
+    if (!tooClose) {
+      points0.emplace_back(c.x, c.y);
+    }
+    if (points0.size() >= 500) break;
+  }
 
   // ========================================
   // Optical Flow (OpenCV)
