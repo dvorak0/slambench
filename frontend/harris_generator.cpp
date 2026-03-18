@@ -1,5 +1,5 @@
 // Harris Generator - AOT compiled Harris
-// Follows lesson_21 pattern
+// Supports both manual and auto schedule via GENERATOR_MODE
 
 #include "Halide.h"
 
@@ -7,6 +7,9 @@ using namespace Halide;
 
 class Harris : public Generator<Harris> {
 public:
+    // 0 = no schedule, 1 = manual schedule
+    GeneratorParam<int> generator_mode{"generator_mode", 1};
+    
     Input<Buffer<uint8_t, 2>> input{"input"};
     Output<Buffer<float, 2>> output{"output"};
     
@@ -43,9 +46,12 @@ public:
     }
     
     void schedule() {
-        // Manual schedule
-        Var x("x"), y("y"), yi;
-        output.split(y, y, yi, 32).parallel(y).vectorize(x, 8);
+        if (generator_mode == 1) {
+            // Manual schedule
+            Var x("x"), y("y"), yi;
+            output.split(y, y, yi, 32).parallel(y).vectorize(x, 8);
+        }
+        // generator_mode == 0 means no schedule (for auto-scheduler)
     }
 };
 

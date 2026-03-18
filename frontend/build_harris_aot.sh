@@ -25,14 +25,15 @@ g++ harris_generator.cpp \
     -lHalide -lpthread -ldl \
     -o harris_generator
 
-# Step 2: Generate AOT (manual schedule - default in generator)
+# Step 2: Generate AOT (manual schedule)
 echo "[2/3] Generating AOT (manual schedule)..."
 ./harris_generator \
     -o . \
     -g harris \
     -f harris_manual \
     -e static_library,h,schedule \
-    target=host
+    target=host \
+    generator_mode=1
 
 echo "Generated: harris_manual.a, harris_manual.h"
 
@@ -45,6 +46,7 @@ echo "[3/3] Generating AOT (auto schedule)..."
     -e static_library,h,schedule \
     -p $HALIDE_ROOT/lib64/libautoschedule_mullapudi2016.so \
     target=host \
+    generator_mode=0 \
     autoscheduler=Mullapudi2016 \
     autoscheduler.parallelism=32 \
     autoscheduler.last_level_cache_size=16777216 \
