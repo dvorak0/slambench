@@ -23,6 +23,7 @@ static double ms_since(const Clock::time_point& start, const Clock::time_point& 
 struct HalideHarrisPipeline {
   Halide::Func out;
   Halide::Target target;
+  Halide::Buffer<uint8_t> input_buf;
   Halide::Buffer<float> output_buf;
   bool built = false;
   bool compiled = false;
@@ -35,7 +36,8 @@ struct HalideHarrisPipeline {
     const int width = gray.cols;
     const int height = gray.rows;
     
-    Halide::Buffer<uint8_t> input_buf(width, height);
+    // Pre-allocate input buffer
+    input_buf = Halide::Buffer<uint8_t>(width, height);
     for (int y = 0; y < height; ++y) {
       for (int x = 0; x < width; ++x) {
         input_buf(x, y) = gray.at<unsigned char>(y, x);
@@ -103,7 +105,7 @@ struct HalideHarrisPipeline {
     Ix.compute_with(Iy, x);
     
     // Pre-allocate output buffer
-    output_buf = Halide::Buffer<float>(width, height);
+    output_buf = Halide::Buffer<float>(input_buf.width(), input_buf.height());
     
     // Get JIT target
     target = Halide::get_jit_target_from_environment();
@@ -118,7 +120,20 @@ struct HalideHarrisPipeline {
     compiled = true;
   }
   
+  // Update input data from cv::Mat
+  void update_input(const cv::Mat& gray) {
+    const int width = gray.cols;
+    const int height = gray.rows;
+    for (int y = 0; y < height; ++y) {
+      for (int x = 0; x < width; ++x) {
+        input_buf(x, y) = gray.at<unsigned char>(y, x);
+      }
+    }
+  }
+  
   Halide::Buffer<float> run(const cv::Mat& gray) {
+    // Update input data
+    update_input(gray);
     // Re-use the pre-allocated buffer
     out.realize(output_buf);
     return output_buf;
