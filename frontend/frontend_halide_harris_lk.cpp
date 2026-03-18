@@ -37,27 +37,26 @@ static Halide::Buffer<float> compute_halide_harris(const cv::Mat& gray, bool use
   Func in_f("in_f");
   in_f(x, y) = BoundaryConditions::repeat_edge(input)(x, y);
 
-  // Compute gradients as int16 (scale up to preserve precision)
-  // Sobel weights scaled by 8 to avoid fractions
-  Func Iy("Iy");
-  Iy(x, y) = cast<int16_t>(in_f(x - 1, y - 1) * (-1) + in_f(x - 1, y + 1) * (1) +
-                             in_f(x, y - 1) * (-2) + in_f(x, y + 1) * (2) +
-                             in_f(x + 1, y - 1) * (-1) + in_f(x + 1, y + 1) * (1));
-
+  // Compute gradients as int8 (scaled to fit in [-127, 127])
+  // Sobel weights scaled down to keep output in int8 range
+  // Ix: horizontal gradient, scale by 1/4 to fit in int8
   Func Ix("Ix");
-  Ix(x, y) = cast<int16_t>(in_f(x - 1, y - 1) * (-1) + in_f(x + 1, y - 1) * (1) +
-                             in_f(x - 1, y) * (-2) + in_f(x + 1, y) * (2) +
-                             in_f(x - 1, y + 1) * (-1) + in_f(x + 1, y + 1) * (1));
+  Ix(x, y) = cast<int8_t>((in_f(x + 1, y) - in_f(x - 1, y)));
 
-  // Covariance terms as int32 (dx*dx can be up to 255^2 * 36 = ~2.3M, fits in int32)
+  // Iy: vertical gradient
+  Func Iy("Iy");
+  Iy(x, y) = cast<int8_t>((in_f(x, y + 1) - in_f(x, y - 1)));
+
+  // Covariance: dx*dx, dx*dy, dy*dy - need int16 to avoid overflow (int8*int8 can overflow)
+  // Scale down by 4 to fit in int16: max is 127*127/4 = 4033, fits in int16
   Func Ixx("Ixx");
-  Ixx(x, y) = cast<int32_t>(Ix(x, y) * Ix(x, y));
+  Ixx(x, y) = cast<int16_t>(Ix(x, y) * Ix(x, y) / 4);
   Func Iyy("Iyy");
-  Iyy(x, y) = cast<int32_t>(Iy(x, y) * Iy(x, y));
+  Iyy(x, y) = cast<int16_t>(Iy(x, y) * Iy(x, y) / 4);
   Func Ixy("Ixy");
-  Ixy(x, y) = cast<int32_t>(Ix(x, y) * Iy(x, y));
+  Ixy(x, y) = cast<int16_t>(Ix(x, y) * Iy(x, y) / 4);
 
-  // Box filter (3x3 sum) as int32
+  // Box filter (3x3 sum) as int32 (9 * 4033 = 36297, fits in int32)
   Func Sxx("Sxx"), Syy("Syy"), Sxy("Sxy");
   Sxx(x, y) = Ixx(x - 1, y - 1) + Ixx(x - 1, y) + Ixx(x - 1, y + 1) +
               Ixx(x, y - 1) + Ixx(x, y) + Ixx(x, y + 1) +
