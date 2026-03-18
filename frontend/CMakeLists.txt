@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(OpenCV REQUIRED)
 
+# OpenCV frontends
 add_executable(frontend_harris_lk frontend_harris_lk.cpp)
 target_link_libraries(frontend_harris_lk PRIVATE ${OpenCV_LIBS})
 
@@ -15,65 +16,25 @@ target_link_libraries(frontend_orb_bf PRIVATE ${OpenCV_LIBS})
 add_executable(frontend_harris_c frontend_harris_c.cpp)
 target_link_libraries(frontend_harris_c PRIVATE ${OpenCV_LIBS} Threads::Threads)
 
-# Halide is only needed for frontend_halide_harris_lk.
-# Prefer CMake package discovery (works with official pip wheel / binary installs),
-# then fall back to manual header/library lookup.
-find_package(Halide CONFIG QUIET)
+# Halide AOT libraries
+find_path(HALIDE_INCLUDE_DIR NAMES Halide.h HINTS /usr/local/include /usr/include PATH_SUFFIXES halide13 halide Halide)
 
-if(Halide_FOUND)
-  message(STATUS "Found Halide via CMake package")
-  add_executable(frontend_halide_harris_lk frontend_halide_harris_lk.cpp)
-  target_link_libraries(frontend_halide_harris_lk PRIVATE ${OpenCV_LIBS} Halide::Halide)
-else()
-  find_path(HALIDE_INCLUDE_DIR
-    NAMES Halide.h
-    HINTS /usr/local/include /usr/include
-    PATH_SUFFIXES halide13 halide Halide)
-  find_library(HALIDE_LIBRARY
-    NAMES Halide libHalide.so
-    HINTS /usr/local/lib /usr/lib /usr/lib/x86_64-linux-gnu)
-
-  if(HALIDE_INCLUDE_DIR AND HALIDE_LIBRARY)
-    message(STATUS "Found Halide: ${HALIDE_INCLUDE_DIR}, ${HALIDE_LIBRARY}")
-    add_executable(frontend_halide_harris_lk frontend_halide_harris_lk.cpp)
-    target_include_directories(frontend_halide_harris_lk PRIVATE ${HALIDE_INCLUDE_DIR})
-    target_link_libraries(frontend_halide_harris_lk PRIVATE ${OpenCV_LIBS} ${HALIDE_LIBRARY} dl pthread)
-  else()
-    message(WARNING "Halide not found, frontend_halide_harris_lk will not be built")
-  endif()
+# Harris AOT tests
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/harris_manual.a AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/halide_harris_manual.cpp)
+  add_executable(halide_harris_manual halide_harris_manual.cpp)
+  target_include_directories(halide_harris_manual PRIVATE ${HALIDE_INCLUDE_DIR} ${CMAKE_CURRENT_SOURCE_DIR})
+  target_link_libraries(halide_harris_manual PRIVATE ${OpenCV_LIBS} ${CMAKE_CURRENT_SOURCE_DIR}/harris_manual.a dl pthread)
 endif()
 
-# Harris AOT test (links against generator-produced static library)
-# Builds both manual and auto-schedule versions
-if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/harris_manual.h AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/harris_manual.a)
-  message(STATUS "Found Harris AOT manual library")
-  
-  # Manual schedule version
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/harris_auto.a AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/halide_harris_auto.cpp)
+  add_executable(halide_harris_auto halide_harris_auto.cpp)
+  target_include_directories(halide_harris_auto PRIVATE ${HALIDE_INCLUDE_DIR} ${CMAKE_CURRENT_SOURCE_DIR})
+  target_link_libraries(halide_harris_auto PRIVATE ${OpenCV_LIBS} ${CMAKE_CURRENT_SOURCE_DIR}/harris_auto.a dl pthread)
+endif()
+
+# Full frontend test with Halide Harris + Optical Flow
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/harris_auto.a AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/frontend_halide_harris_lk.cpp)
   add_executable(frontend_halide_harris_lk frontend_halide_harris_lk.cpp)
-  target_include_directories(frontend_halide_harris_lk PRIVATE 
-    ${HALIDE_INCLUDE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}
-  )
-  target_compile_definitions(frontend_halide_harris_lk PRIVATE Harris_AOT_LIBRARY=harris_manual)
-  target_link_libraries(frontend_halide_harris_lk PRIVATE 
-    ${OpenCV_LIBS} 
-    ${CMAKE_CURRENT_SOURCE_DIR}/harris_manual.a 
-    dl pthread
-  )
-  
-  # Auto schedule version (if available)
-  if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/harris_auto.a)
-    message(STATUS "Found Harris AOT auto library")
-    add_executable(frontend_halide_harris_lk_auto frontend_halide_harris_lk.cpp)
-    target_include_directories(frontend_halide_harris_lk_auto PRIVATE 
-      ${HALIDE_INCLUDE_DIR}
-      ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    target_compile_definitions(frontend_halide_harris_lk_auto PRIVATE Harris_AOT_LIBRARY=harris_auto)
-    target_link_libraries(frontend_halide_harris_lk_auto PRIVATE 
-      ${OpenCV_LIBS} 
-      ${CMAKE_CURRENT_SOURCE_DIR}/harris_auto.a 
-      dl pthread
-    )
-  endif()
+  target_include_directories(frontend_halide_harris_lk PRIVATE ${HALIDE_INCLUDE_DIR} ${CMAKE_CURRENT_SOURCE_DIR})
+  target_link_libraries(frontend_halide_harris_lk PRIVATE ${OpenCV_LIBS} ${CMAKE_CURRENT_SOURCE_DIR}/harris_auto.a dl pthread)
 endif()
