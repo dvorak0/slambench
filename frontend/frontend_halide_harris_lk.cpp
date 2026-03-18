@@ -1,12 +1,5 @@
-// Halide Harris AOT Test
-// Links against generator-produced static library (manual or auto schedule)
-#ifdef Harris_AOT_LIBRARY
-#define HARRIS_FUNC Harris_AOT_LIBRARY
-#else
-#define HARRIS_FUNC harris_manual
-#endif
-
-#include HARRIS_FUNC.h
+// Halide Harris AOT Test - Manual Schedule
+#include "harris_manual.h"
 #include <opencv2/opencv.hpp>
 #include <HalideBuffer.h>
 #include <iostream>
@@ -39,19 +32,19 @@ int main(int argc, char** argv) {
     Buffer<float> output(W, H);
     
     // Warmup
-    HARRIS_FUNC(input.raw_buffer(), output.raw_buffer());
+    harris_manual(input.raw_buffer(), output.raw_buffer());
     
     // Time it
     const int runs = 5;
     double total = 0;
     for (int i = 0; i < runs; i++) {
         auto start = high_resolution_clock::now();
-        HARRIS_FUNC(input.raw_buffer(), output.raw_buffer());
+        harris_manual(input.raw_buffer(), output.raw_buffer());
         auto end = high_resolution_clock::now();
         total += duration_cast<microseconds>(end - start).count() / 1000.0;
     }
     
-    cout << "Harris AOT (" << #Harris_AOT_LIBRARY << "): " << (total / runs) << " ms" << endl;
+    cout << "Harris (manual AOT): " << (total / runs) << " ms" << endl;
     
     return 0;
 }
