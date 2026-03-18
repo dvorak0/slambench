@@ -1,4 +1,3 @@
-#include <Halide.h>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/video/tracking.hpp>
@@ -18,7 +17,7 @@ static double ms_since(const Clock::time_point& start, const Clock::time_point& 
 }
 
 // Pure C implementation mimicking OpenCV's Harris
-static Halide::Buffer<float> compute_harris_c(const cv::Mat& gray) {
+static cv::Mat compute_harris_c(const cv::Mat& gray) {
     const int width = gray.cols;
     const int height = gray.rows;
     
@@ -63,15 +62,8 @@ static Halide::Buffer<float> compute_harris_c(const cv::Mat& gray) {
         }
     }
     
-    // Copy to Halide Buffer
-    Halide::Buffer<float> result(width, height);
-    for (int y = 0; y < height; y++) {
-        const float* r = response.ptr<float>(y);
-        for (int x = 0; x < width; x++) {
-            result(x, y) = r[x];
-        }
-    }
-    return result;
+    // Return the response directly
+    return response;
 }
 
 static Halide::Buffer<float> compute_halide_harris(const cv::Mat& gray, bool use_autoschedule) {
@@ -170,19 +162,19 @@ static Halide::Buffer<float> compute_halide_harris(const cv::Mat& gray, bool use
   return out.realize({width, height});
 }
 
-static std::vector<cv::Point2f> select_points_from_response(const Halide::Buffer<float>& response,
+static std::vector<cv::Point2f> select_points_from_response(const cv::Mat& response,
                                                             int max_corners,
                                                             double quality_level,
                                                             double min_distance) {
-  const int width = response.width();
-  const int height = response.height();
+  const int width = response.cols;
+  const int height = response.rows;
 
-  cv::Mat resp(height, width, CV_32F);
+  // The response is already a cv::Mat, just use it directly
+  const cv::Mat& resp = response;
   float max_response = 0.0f;
   for (int y = 0; y < height; ++y) {
     for (int x = 0; x < width; ++x) {
-      const float value = response(x, y);
-      resp.at<float>(y, x) = value;
+      const float value = resp.at<float>(y, x);
       max_response = std::max(max_response, value);
     }
   }
@@ -257,20 +249,20 @@ int main(int argc, char** argv) {
 
   // ==================== Pure C Harris ====================
   auto start_c = Clock::now();
-  Halide::Buffer<float> response_c = compute_harris_c(gray0);
+  cv::Mat response_c = compute_harris_c(gray0);
   auto end_c = Clock::now();
   double c_ms = ms_since(start_c, end_c);
   
   // Warmup
   for (int i = 0; i < 3; i++) {
-    Halide::Buffer<float> dummy = compute_harris_c(gray0);
+    cv::Mat dummy = compute_harris_c(gray0);
   }
   
   // Timed runs
   double c_total = 0;
   for (int i = 0; i < 5; i++) {
     start_c = Clock::now();
-    Halide::Buffer<float> response_c2 = compute_harris_c(gray0);
+    cv::Mat response_c2 = compute_harris_c(gray0);
     end_c = Clock::now();
     c_total += ms_since(start_c, end_c);
   }
