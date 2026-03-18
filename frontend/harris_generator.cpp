@@ -14,6 +14,9 @@ public:
     Output<Buffer<float, 2>> output{"output"};
     
     void generate() {
+        Var x("x"), y("y");
+        
+        // Boundary conditions
         Func in_f("in_f");
         in_f(x, y) = BoundaryConditions::repeat_edge(input)(x, y);
         
