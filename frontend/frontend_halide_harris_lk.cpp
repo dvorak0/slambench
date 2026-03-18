@@ -19,6 +19,112 @@ static double ms_since(const Clock::time_point& start, const Clock::time_point& 
   return std::chrono::duration<double, std::milli>(end - start).count();
 }
 
+// Global pipeline for Halide Harris (built once)
+struct HalideHarrisPipeline {
+  Halide::Pipeline pipeline;
+  Halide::Argument input;
+  bool built = false;
+  
+  void build(const cv::Mat& gray) {
+    if (built) return;
+    
+    using namespace Halide;
+    
+    const int width = gray.cols;
+    const int height = gray.rows;
+    
+    Halide::Buffer<uint8_t> input_buf(width, height);
+    for (int y = 0; y < height; ++y) {
+      for (int x = 0; x < width; ++x) {
+        input_buf(x, y) = gray.at<unsigned char>(y, x);
+      }
+    }
+    
+    Var x("x"), y("y");
+    Func in_f("in_f");
+    in_f(x, y) = BoundaryConditions::repeat_edge(input_buf)(x, y);
+    
+    Func gray_f("gray");
+    gray_f(x, y) = in_f(x, y);
+    
+    Func Iy("Iy");
+    Iy(x, y) = gray_f(x - 1, y - 1) * (-1.0f / 12.0f) + gray_f(x - 1, y + 1) * (1.0f / 12.0f) +
+               gray_f(x, y - 1) * (-2.0f / 12.0f) + gray_f(x, y + 1) * (2.0f / 12.0f) +
+               gray_f(x + 1, y - 1) * (-1.0f / 12.0f) + gray_f(x + 1, y + 1) * (1.0f / 12.0f);
+    
+    Func Ix("Ix");
+    Ix(x, y) = gray_f(x - 1, y - 1) * (-1.0f / 12.0f) + gray_f(x + 1, y - 1) * (1.0f / 12.0f) +
+               gray_f(x - 1, y) * (-2.0f / 12.0f) + gray_f(x + 1, y) * (2.0f / 12.0f) +
+               gray_f(x - 1, y + 1) * (-1.0f / 12.0f) + gray_f(x + 1, y + 1) * (1.0f / 12.0f);
+    
+    Func Ixx("Ixx"), Iyy("Iyy"), Ixy("Ixy");
+    Ixx(x, y) = Ix(x, y) * Ix(x, y);
+    Iyy(x, y) = Iy(x, y) * Iy(x, y);
+    Ixy(x, y) = Ix(x, y) * Iy(x, y);
+    
+    Func Sxx("Sxx"), Syy("Syy"), Sxy("Sxy");
+    Sxx(x, y) = Ixx(x - 1, y - 1) + Ixx(x - 1, y) + Ixx(x - 1, y + 1) +
+                 Ixx(x, y - 1) + Ixx(x, y) + Ixx(x, y + 1) +
+                 Ixx(x + 1, y - 1) + Ixx(x + 1, y) + Ixx(x + 1, y + 1);
+    Syy(x, y) = Iyy(x - 1, y - 1) + Iyy(x - 1, y) + Iyy(x - 1, y + 1) +
+                 Iyy(x, y - 1) + Iyy(x, y) + Iyy(x, y + 1) +
+                 Iyy(x + 1, y - 1) + Iyy(x + 1, y) + Iyy(x + 1, y + 1);
+    Sxy(x, y) = Ixy(x - 1, y - 1) + Ixy(x - 1, y) + Ixy(x - 1, y + 1) +
+                 Ixy(x, y - 1) + Ixy(x, y) + Ixy(x, y + 1) +
+                 Ixy(x + 1, y - 1) + Ixy(x + 1, y) + Ixy(x + 1, y + 1);
+    
+    Func det("det"), trace("trace"), out("out");
+    det(x, y) = Sxx(x, y) * Syy(x, y) - Sxy(x, y) * Sxy(x, y);
+    trace(x, y) = Sxx(x, y) + Syy(x, y);
+    out(x, y) = det(x, y) - 0.04f * trace(x, y) * trace(x, y);
+    
+    // Schedule - matching official Halide Harris
+    Var yi("yi");
+    const int vec = 8;
+    
+    out.split(y, y, yi, 32)
+        .parallel(y)
+        .vectorize(x, vec);
+    
+    gray_f.store_at(out, y)
+        .compute_at(out, yi)
+        .vectorize(x, vec);
+    
+    Ix.store_at(out, y)
+        .compute_at(out, yi)
+        .vectorize(x, vec);
+    
+    Iy.store_at(out, y)
+        .compute_at(out, yi)
+        .vectorize(x, vec);
+    
+    Ix.compute_with(Iy, x);
+    
+    pipeline = Pipeline(out);
+    input = Input<Buffer<uint8_t>>("input");
+    pipeline.compile_to_callable({input});
+    built = true;
+  }
+  
+  Halide::Buffer<float> run(const cv::Mat& gray) {
+    using namespace Halide;
+    
+    const int width = gray.cols;
+    const int height = gray.rows;
+    
+    Halide::Buffer<uint8_t> input_buf(width, height);
+    for (int y = 0; y < height; ++y) {
+      for (int x = 0; x < width; ++x) {
+        input_buf(x, y) = gray.at<unsigned char>(y, x);
+      }
+    }
+    
+    Halide::Buffer<float> output(width, height);
+    pipeline.realize({input_buf, output});
+    return output;
+  }
+};
+
 static Halide::Buffer<float> compute_halide_harris(const cv::Mat& gray, bool use_autoschedule) {
   using namespace Halide;
 
@@ -114,6 +220,13 @@ static Halide::Buffer<float> compute_halide_harris(const cv::Mat& gray, bool use
   return out.realize({width, height});
 }
 
+// Wrapper for backward compatibility - uses the static pipeline
+static Halide::Buffer<float> compute_halide_harris(const cv::Mat& gray, bool use_autoschedule) {
+  static HalideHarrisPipeline pipeline;
+  pipeline.build(gray);
+  return pipeline.run(gray);
+}
+
 static std::vector<cv::Point2f> select_points_from_response(const Halide::Buffer<float>& response,
                                                             int max_corners,
                                                             double quality_level,
@@ -207,18 +320,21 @@ int main(int argc, char** argv) {
   Halide::Buffer<float> response;
   const int warmup_runs = 2;
   const int timed_runs = 5;
-  const bool use_autoschedule = true;
+  
+  // Build pipeline ONCE (includes JIT compilation)
+  static HalideHarrisPipeline pipeline;
+  pipeline.build(gray0);
   
   // Warmup runs
   for (int i = 0; i < warmup_runs; ++i) {
-    response = compute_halide_harris(gray0, use_autoschedule);
+    response = pipeline.run(gray0);
   }
   
   // Timed runs - average
   double halide_response_ms = 0.0;
   for (int i = 0; i < timed_runs; ++i) {
     const auto t3_run_start = Clock::now();
-    response = compute_halide_harris(gray0, use_autoschedule);
+    response = pipeline.run(gray0);
     const auto t3_run_end = Clock::now();
     halide_response_ms += ms_since(t3_run_start, t3_run_end);
   }
