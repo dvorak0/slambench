@@ -45,13 +45,13 @@ endif()
 
 # Harris AOT test (links against generator-produced static library)
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/harris_manual.h AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/harris_manual.a)
-  message(STATUS "Found Harris AOT library, adding harris_aot_test")
-  add_executable(harris_aot_test harris_aot_test.cpp)
-  target_include_directories(harris_aot_test PRIVATE 
+  message(STATUS "Found Harris AOT library, adding frontend_halide_harris_lk")
+  add_executable(frontend_halide_harris_lk frontend_halide_harris_lk.cpp)
+  target_include_directories(frontend_halide_harris_lk PRIVATE 
     ${HALIDE_INCLUDE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}
   )
-  target_link_libraries(harris_aot_test PRIVATE 
+  target_link_libraries(frontend_halide_harris_lk PRIVATE 
     ${OpenCV_LIBS} 
     ${CMAKE_CURRENT_SOURCE_DIR}/harris_manual.a 
     dl pthread
