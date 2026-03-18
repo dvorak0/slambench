@@ -128,7 +128,7 @@ int main(int argc, char** argv) {
     if (!tooClose) {
       points0.push_back(c);
     }
-    if (points0.size() >= 500) break;
+    if (points0.size() >= 200) break;
   }
 
   // ========================================
