@@ -71,15 +71,15 @@ int main(int argc, char** argv) {
     
     Buffer<float> output(W, H);
     
-    // Call AOT function
-    harris_manual(input.get(), output.get());
+    // Call AOT function - use &buf to get halide_buffer_t*
+    harris_manual(&input.buf, &output.buf);
     
     // Time it
     const int runs = 5;
     double total = 0;
     for (int i = 0; i < runs; i++) {
         auto start = high_resolution_clock::now();
-        harris_manual(input.get(), output.get());
+        harris_manual(&input.buf, &output.buf);
         auto end = high_resolution_clock::now();
         total += duration_cast<microseconds>(end - start).count() / 1000.0;
     }
