@@ -21,8 +21,7 @@ static double ms_since(const Clock::time_point& start, const Clock::time_point& 
 
 // Global pipeline for Halide Harris (built once)
 struct HalideHarrisPipeline {
-  Halide::Pipeline pipeline;
-  Halide::Argument input;
+  Halide::Func out;
   bool built = false;
   
   void build(const cv::Mat& gray) {
@@ -73,7 +72,7 @@ struct HalideHarrisPipeline {
                  Ixy(x, y - 1) + Ixy(x, y) + Ixy(x, y + 1) +
                  Ixy(x + 1, y - 1) + Ixy(x + 1, y) + Ixy(x + 1, y + 1);
     
-    Func det("det"), trace("trace"), out("out");
+    Func det("det"), trace("trace");
     det(x, y) = Sxx(x, y) * Syy(x, y) - Sxy(x, y) * Sxy(x, y);
     trace(x, y) = Sxx(x, y) + Syy(x, y);
     out(x, y) = det(x, y) - 0.04f * trace(x, y) * trace(x, y);
@@ -100,27 +99,18 @@ struct HalideHarrisPipeline {
     
     Ix.compute_with(Iy, x);
     
-    pipeline = Pipeline(out);
-    input = Input<Buffer<uint8_t>>("input");
-    pipeline.compile_to_callable({input});
+    // Force JIT compilation now
+    Halide::Buffer<float> output(width, height);
+    out.realize(output);
+    
     built = true;
   }
   
   Halide::Buffer<float> run(const cv::Mat& gray) {
-    using namespace Halide;
-    
     const int width = gray.cols;
     const int height = gray.rows;
-    
-    Halide::Buffer<uint8_t> input_buf(width, height);
-    for (int y = 0; y < height; ++y) {
-      for (int x = 0; x < width; ++x) {
-        input_buf(x, y) = gray.at<unsigned char>(y, x);
-      }
-    }
-    
     Halide::Buffer<float> output(width, height);
-    pipeline.realize({input_buf, output});
+    out.realize(output);
     return output;
   }
 };
