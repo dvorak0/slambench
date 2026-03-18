@@ -25,10 +25,11 @@ static Halide::Buffer<float> compute_halide_harris(const cv::Mat& gray, bool use
   const int width = gray.cols;
   const int height = gray.rows;
 
-  Halide::Buffer<float> input(width, height);
+  // Keep input as uint8 (no float conversion at input)
+  Halide::Buffer<uint8_t> input(width, height);
   for (int y = 0; y < height; ++y) {
     for (int x = 0; x < width; ++x) {
-      input(x, y) = static_cast<float>(gray.at<unsigned char>(y, x));
+      input(x, y) = gray.at<unsigned char>(y, x);
     }
   }
 
@@ -36,23 +37,27 @@ static Halide::Buffer<float> compute_halide_harris(const cv::Mat& gray, bool use
   Func in_f("in_f");
   in_f(x, y) = BoundaryConditions::repeat_edge(input)(x, y);
 
+  // Compute gradients as int16 (scale up to preserve precision)
+  // Sobel weights scaled by 8 to avoid fractions
   Func Iy("Iy");
-  Iy(x, y) = in_f(x - 1, y - 1) * (-1.0f / 12.0f) + in_f(x - 1, y + 1) * (1.0f / 12.0f) +
-             in_f(x, y - 1) * (-2.0f / 12.0f) + in_f(x, y + 1) * (2.0f / 12.0f) +
-             in_f(x + 1, y - 1) * (-1.0f / 12.0f) + in_f(x + 1, y + 1) * (1.0f / 12.0f);
+  Iy(x, y) = cast<int16_t>(in_f(x - 1, y - 1) * (-1) + in_f(x - 1, y + 1) * (1) +
+                             in_f(x, y - 1) * (-2) + in_f(x, y + 1) * (2) +
+                             in_f(x + 1, y - 1) * (-1) + in_f(x + 1, y + 1) * (1));
 
   Func Ix("Ix");
-  Ix(x, y) = in_f(x - 1, y - 1) * (-1.0f / 12.0f) + in_f(x + 1, y - 1) * (1.0f / 12.0f) +
-             in_f(x - 1, y) * (-2.0f / 12.0f) + in_f(x + 1, y) * (2.0f / 12.0f) +
-             in_f(x - 1, y + 1) * (-1.0f / 12.0f) + in_f(x + 1, y + 1) * (1.0f / 12.0f);
+  Ix(x, y) = cast<int16_t>(in_f(x - 1, y - 1) * (-1) + in_f(x + 1, y - 1) * (1) +
+                             in_f(x - 1, y) * (-2) + in_f(x + 1, y) * (2) +
+                             in_f(x - 1, y + 1) * (-1) + in_f(x + 1, y + 1) * (1));
 
+  // Covariance terms as int32 (dx*dx can be up to 255^2 * 36 = ~2.3M, fits in int32)
   Func Ixx("Ixx");
-  Ixx(x, y) = Ix(x, y) * Ix(x, y);
+  Ixx(x, y) = cast<int32_t>(Ix(x, y) * Ix(x, y));
   Func Iyy("Iyy");
-  Iyy(x, y) = Iy(x, y) * Iy(x, y);
+  Iyy(x, y) = cast<int32_t>(Iy(x, y) * Iy(x, y));
   Func Ixy("Ixy");
-  Ixy(x, y) = Ix(x, y) * Iy(x, y);
+  Ixy(x, y) = cast<int32_t>(Ix(x, y) * Iy(x, y));
 
+  // Box filter (3x3 sum) as int32
   Func Sxx("Sxx"), Syy("Syy"), Sxy("Sxy");
   Sxx(x, y) = Ixx(x - 1, y - 1) + Ixx(x - 1, y) + Ixx(x - 1, y + 1) +
               Ixx(x, y - 1) + Ixx(x, y) + Ixx(x, y + 1) +
@@ -64,9 +69,10 @@ static Halide::Buffer<float> compute_halide_harris(const cv::Mat& gray, bool use
               Ixy(x, y - 1) + Ixy(x, y) + Ixy(x, y + 1) +
               Ixy(x + 1, y - 1) + Ixy(x + 1, y) + Ixy(x + 1, y + 1);
 
+  // Only convert to float at the final Harris response
   Func det("det"), trace("trace"), out("out");
-  det(x, y) = Sxx(x, y) * Syy(x, y) - Sxy(x, y) * Sxy(x, y);
-  trace(x, y) = Sxx(x, y) + Syy(x, y);
+  det(x, y) = cast<float>(Sxx(x, y) * Syy(x, y) - Sxy(x, y) * Sxy(x, y));
+  trace(x, y) = cast<float>(Sxx(x, y) + Syy(x, y));
   out(x, y) = det(x, y) - 0.04f * trace(x, y) * trace(x, y);
 
   if (use_autoschedule) {
@@ -114,8 +120,26 @@ static Halide::Buffer<float> compute_halide_harris(const cv::Mat& gray, bool use
     trace.compute_at(out, yi);
     trace.vectorize(x, vec);
   } else {
-    // Manual schedule
-    out.vectorize(x, 8).parallel(y);
+    // Manual schedule: tile + vectorize + parallel
+    Var yi("yi");
+    const int vec = 8;
+    const int tile_size = 32;
+    
+    out.split(y, y, yi, tile_size);
+    out.parallel(y);
+    out.vectorize(x, vec);
+    
+    in_f.compute_at(out, yi).vectorize(x, vec);
+    Ix.compute_at(out, yi).vectorize(x, vec);
+    Iy.compute_at(out, yi).vectorize(x, vec);
+    Ixx.compute_at(out, yi).vectorize(x, vec);
+    Iyy.compute_at(out, yi).vectorize(x, vec);
+    Ixy.compute_at(out, yi).vectorize(x, vec);
+    Sxx.compute_at(out, yi).vectorize(x, vec);
+    Syy.compute_at(out, yi).vectorize(x, vec);
+    Sxy.compute_at(out, yi).vectorize(x, vec);
+    det.compute_at(out, yi).vectorize(x, vec);
+    trace.compute_at(out, yi).vectorize(x, vec);
   }
   
   return out.realize({width, height});
