@@ -11,7 +11,7 @@ public:
     GeneratorParam<int> generator_mode{"generator_mode", 1};
     
     Input<Buffer<uint8_t, 2>> input{"input"};
-    Output<Buffer<float, 2>> output{"output", {752, 480}};
+    Output<Buffer<float, 2>> output{"output"};
     
     void generate() {
         Func in_f("in_f");
