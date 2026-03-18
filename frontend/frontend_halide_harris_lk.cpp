@@ -70,49 +70,11 @@ static Halide::Buffer<float> compute_halide_harris(const cv::Mat& gray, bool use
   out(x, y) = det(x, y) - 0.04f * trace(x, y) * trace(x, y);
 
   if (use_autoschedule) {
-    // Simplified high-performance schedule: tile + vectorize + parallel
-    Var yi("yi");
-    const int vec = 8;
-    const int tile_size = 32;
-    
-    // Tile y and parallelize
-    out.split(y, y, yi, tile_size);
-    out.parallel(y);
-    out.vectorize(x, vec);
-    
-    // All intermediate Funcs: compute at inner tile level
-    in_f.compute_at(out, yi);
-    in_f.vectorize(x, vec);
-    
-    Ix.compute_at(out, yi);
-    Ix.vectorize(x, vec);
-    
-    Iy.compute_at(out, yi);
-    Iy.vectorize(x, vec);
-    
-    Ixx.compute_at(out, yi);
-    Ixx.vectorize(x, vec);
-    
-    Iyy.compute_at(out, yi);
-    Iyy.vectorize(x, vec);
-    
-    Ixy.compute_at(out, yi);
-    Ixy.vectorize(x, vec);
-    
-    Sxx.compute_at(out, yi);
-    Sxx.vectorize(x, vec);
-    
-    Syy.compute_at(out, yi);
-    Syy.vectorize(x, vec);
-    
-    Sxy.compute_at(out, yi);
-    Sxy.vectorize(x, vec);
-    
-    det.compute_at(out, yi);
-    det.vectorize(x, vec);
-    
-    trace.compute_at(out, yi);
-    trace.vectorize(x, vec);
+    out.set_estimate(x, 0, width).set_estimate(y, 0, height);
+    Pipeline pipeline(out);
+    Target target = get_host_target();
+    MachineParams machine_params(2, 30 * 1024 * 1024, 40);
+    pipeline.auto_schedule(target, machine_params);
   } else {
     // Manual schedule
     out.vectorize(x, 8).parallel(y);
