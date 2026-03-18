@@ -51,9 +51,26 @@ public:
             input.set_estimates({{0, 752}, {0, 480}});
             output.set_estimates({{0, 752}, {0, 480}});
         } else if (generator_mode == 1) {
-            // Manual schedule
-            Var x("x"), y("y"), yi;
-            output.split(y, y, yi, 32).parallel(y).vectorize(x, 8);
+            // Manual schedule - optimized
+            const int vec = natural_vector_size<float>();
+            Var x("x"), y("y"), yi("yi");
+            
+            // Get intermediate funcs (approximate indices)
+            Func Ix = pipeline.get_func(3);  // Ix
+            Func Iy = pipeline.get_func(4);  // Iy
+            
+            output.split(y, y, yi, 32)
+                .parallel(y)
+                .vectorize(x, vec);
+            
+            // Store intermediate results at output loop, compute at inner loop
+            Ix.store_at(output, y)
+                .compute_at(output, yi)
+                .vectorize(x, vec);
+            Iy.store_at(output, y)
+                .compute_at(output, yi)
+                .vectorize(x, vec);
+            Ix.compute_with(Iy, x);
         }
     }
 };
