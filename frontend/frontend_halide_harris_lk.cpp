@@ -325,6 +325,9 @@ int main(int argc, char** argv) {
   static HalideHarrisPipeline pipeline;
   pipeline.build(gray0);
   
+  // First run (might include compilation)
+  response = pipeline.run(gray0);
+  
   // Warmup runs
   for (int i = 0; i < warmup_runs; ++i) {
     response = pipeline.run(gray0);
@@ -336,7 +339,9 @@ int main(int argc, char** argv) {
     const auto t3_run_start = Clock::now();
     response = pipeline.run(gray0);
     const auto t3_run_end = Clock::now();
-    halide_response_ms += ms_since(t3_run_start, t3_run_end);
+    double this_run = ms_since(t3_run_start, t3_run_end);
+    halide_response_ms += this_run;
+    printf("Run %d: %.3f ms\n", i, this_run);
   }
   halide_response_ms /= timed_runs;
 
