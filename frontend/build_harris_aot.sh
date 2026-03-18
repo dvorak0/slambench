@@ -5,22 +5,23 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-HALIDE_ROOT=${HALIDE_ROOT:-$(python3 -c "import halide; print(halide.install_dir())")}
-HALIDE_SRC=${HALIDE_SRC:-/tmp/Halide}
+HALIDE_ROOT=/usr/local/lib/python3.10/dist-packages/halide
+HALIDE_SRC=/tmp/halide
 
 echo "=========================================="
 echo "HALIDE AOT Harris Builder"
 echo "=========================================="
 echo "HALIDE_ROOT: $HALIDE_ROOT"
+echo "HALIDE_SRC: $HALIDE_SRC"
 echo "Working dir: $SCRIPT_DIR"
 echo ""
 
-# Step 1: Get Halide source if not present
+# Step 1: Get Halide source if not present (on host)
 if [ ! -d "$HALIDE_SRC" ]; then
-    echo "[1/6] Cloning Halide source..."
+    echo "[1/6] Cloning Halide source to host..."
     git clone --depth 1 https://github.com/halide/Halide.git $HALIDE_SRC
 else
-    echo "[1/6] Halide source already present"
+    echo "[1/6] Halide source already present on host"
 fi
 
 cd $SCRIPT_DIR
@@ -28,10 +29,10 @@ cd $SCRIPT_DIR
 # Step 2: Compile the Harris generator
 echo "[2/6] Compiling Harris generator..."
 g++ harris_generator.cpp \
-    $HALIDE_SRC/src/GenGen.cpp \
-    $HALIDE_SRC/src/Generator.h \
+    $HALIDE_SRC/tools/GenGen.cpp \
     -g -std=c++17 -fno-rtti \
     -I $HALIDE_ROOT/include \
+    -I $HALIDE_SRC/src \
     -L $HALIDE_ROOT/lib64 \
     -lHalide -lpthread -ldl \
     -o harris_generator
@@ -68,7 +69,6 @@ echo "Generated: harris_auto.a"
 # Step 5: Build test runner
 echo "[5/6] Building test runner..."
 
-# Create a simple test runner
 cat > harris_test.cpp << 'EOF'
 #include <Halide.h>
 #include <iostream>
