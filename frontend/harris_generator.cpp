@@ -16,6 +16,10 @@ public:
     void generate() {
         Var x("x"), y("y");
         
+        // Provide estimates for auto-scheduler
+        input.set_estimates({{0, 752}, {0, 480}});
+        output.set_estimates({{0, 752}, {0, 480}});
+        
         // Boundary conditions
         Func in_f("in_f");
         in_f(x, y) = BoundaryConditions::repeat_edge(input)(x, y);
