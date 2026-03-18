@@ -46,8 +46,8 @@ echo "[3/3] Generating AOT (auto schedule)..."
     target=host \
     generator_mode=0 \
     autoscheduler=Mullapudi2016 \
-    autoscheduler.parallelism=32 \
-    autoscheduler.last_level_cache_size=16777216 \
+    autoscheduler.parallelism=1 \
+    autoscheduler.last_level_cache_size=1024000 \
     autoscheduler.balance=40
 
 echo "Generated: harris_auto.a, harris_auto.h"
