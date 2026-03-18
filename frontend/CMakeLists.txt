@@ -13,7 +13,7 @@ add_executable(frontend_orb_bf frontend_orb_bf.cpp)
 target_link_libraries(frontend_orb_bf PRIVATE ${OpenCV_LIBS})
 
 add_executable(frontend_harris_c frontend_harris_c.cpp)
-target_link_libraries(frontend_harris_c PRIVATE ${OpenCV_LIBS})
+target_link_libraries(frontend_harris_c PRIVATE ${OpenCV_LIBS} Threads::Threads)
 
 # Halide is only needed for frontend_halide_harris_lk.
 # Prefer CMake package discovery (works with official pip wheel / binary installs),
