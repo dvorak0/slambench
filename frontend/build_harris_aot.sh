@@ -39,13 +39,13 @@ echo "Generated: harris_manual.a, harris_manual.h"
 echo "[3/3] Building test runner..."
 
 cat > harris_aot_test.cpp << 'EOF'
-#include <Halide.h>
 #include "harris_manual.h"
 #include <opencv2/opencv.hpp>
+#include <HalideBuffer.h>
 #include <iostream>
 #include <chrono>
 
-using namespace Halide;
+using namespace Halide::Runtime;
 using namespace std;
 using namespace std::chrono;
 
@@ -62,16 +62,16 @@ int main(int argc, char** argv) {
     int H = img.rows;
     cout << "Image: " << W << "x" << H << endl;
     
-    Buffer<uint8_t, 2> input(W, H);
+    Buffer<uint8_t> input(W, H);
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
             input(x, y) = img.at<uint8_t>(y, x);
         }
     }
     
-    Buffer<float, 2> output(W, H);
+    Buffer<float> output(W, H);
     
-    // Call AOT function - use .get() to get halide_buffer_t*
+    // Call AOT function
     harris_manual(input.get(), output.get());
     
     // Time it
