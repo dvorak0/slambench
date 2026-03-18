@@ -1,6 +1,6 @@
 #!/bin/bash
 # Build AOT Harris Generator - produces static library
-# Output: harris_manual.a, harris_manual.h
+# Output: harris_manual.a, harris_manual.h, harris_auto.a, harris_auto.h
 
 set -e
 
@@ -15,7 +15,7 @@ echo "HALIDE AOT Harris Generator"
 echo "=========================================="
 
 # Step 1: Compile generator
-echo "[1/2] Compiling Harris generator..."
+echo "[1/4] Compiling Harris generator..."
 g++ harris_generator.cpp \
     $HALIDE_SRC/tools/GenGen.cpp \
     -g -std=c++17 -fno-rtti \
@@ -26,7 +26,7 @@ g++ harris_generator.cpp \
     -o harris_generator
 
 # Step 2: Generate AOT (manual schedule)
-echo "[2/2] Generating AOT static library..."
+echo "[2/4] Generating AOT (manual schedule)..."
 ./harris_generator \
     -o . \
     -g harris \
@@ -35,4 +35,22 @@ echo "[2/2] Generating AOT static library..."
     target=host
 
 echo "Generated: harris_manual.a, harris_manual.h"
+
+# Step 3: Generate AOT (auto schedule)
+echo "[3/4] Generating AOT (auto schedule)..."
+./harris_generator \
+    -o . \
+    -g harris \
+    -f harris_auto \
+    -e static_library,h,schedule \
+    -p $HALIDE_ROOT/lib64/libautoschedule_mullapudi2016.so \
+    target=host \
+    autoscheduler=Mullapudi2016 \
+    autoscheduler.parallelism=32 \
+    autoscheduler.last_level_cache_size=16777216 \
+    autoscheduler.balance=40
+
+echo "Generated: harris_auto.a, harris_auto.h"
+
+echo "[4/4] Done!"
 echo "=========================================="

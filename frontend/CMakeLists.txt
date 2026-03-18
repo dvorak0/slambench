@@ -44,16 +44,36 @@ else()
 endif()
 
 # Harris AOT test (links against generator-produced static library)
+# Builds both manual and auto-schedule versions
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/harris_manual.h AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/harris_manual.a)
-  message(STATUS "Found Harris AOT library, adding frontend_halide_harris_lk")
+  message(STATUS "Found Harris AOT manual library")
+  
+  # Manual schedule version
   add_executable(frontend_halide_harris_lk frontend_halide_harris_lk.cpp)
   target_include_directories(frontend_halide_harris_lk PRIVATE 
     ${HALIDE_INCLUDE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}
   )
+  target_compile_definitions(frontend_halide_harris_lk PRIVATE Harris_AOT_LIBRARY=harris_manual)
   target_link_libraries(frontend_halide_harris_lk PRIVATE 
     ${OpenCV_LIBS} 
     ${CMAKE_CURRENT_SOURCE_DIR}/harris_manual.a 
     dl pthread
   )
+  
+  # Auto schedule version (if available)
+  if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/harris_auto.a)
+    message(STATUS "Found Harris AOT auto library")
+    add_executable(frontend_halide_harris_lk_auto frontend_halide_harris_lk.cpp)
+    target_include_directories(frontend_halide_harris_lk_auto PRIVATE 
+      ${HALIDE_INCLUDE_DIR}
+      ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    target_compile_definitions(frontend_halide_harris_lk_auto PRIVATE Harris_AOT_LIBRARY=harris_auto)
+    target_link_libraries(frontend_halide_harris_lk_auto PRIVATE 
+      ${OpenCV_LIBS} 
+      ${CMAKE_CURRENT_SOURCE_DIR}/harris_auto.a 
+      dl pthread
+    )
+  endif()
 endif()
