@@ -94,6 +94,7 @@ g++ harris_aot_test.cpp \
     -std=c++17 \
     -I $HALIDE_ROOT/include \
     -I $HALIDE_SRC \
+    -I /usr/include/opencv4 \
     -ldl -lpthread \
     -lopencv_core -lopencv_imgcodecs \
     -o harris_aot_test
