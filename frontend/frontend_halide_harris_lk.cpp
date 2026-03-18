@@ -73,8 +73,11 @@ static Halide::Buffer<float> compute_halide_harris(const cv::Mat& gray, bool use
     out.set_estimate(x, 0, width).set_estimate(y, 0, height);
     Pipeline pipeline(out);
     Target target = get_host_target();
-    MachineParams machine_params(2, 30 * 1024 * 1024, 40);
-    pipeline.auto_schedule(target, machine_params);
+    AutoschedulerParams params("Mullapudi2016");
+    params.extra["parallelism"] = "2";
+    params.extra["last_level_cache_size"] = "31457280";
+    params.extra["balance"] = "40";
+    pipeline.apply_autoscheduler(target, params);
   } else {
     // Manual schedule
     out.vectorize(x, 8).parallel(y);
