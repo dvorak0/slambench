@@ -1,6 +1,7 @@
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/video/tracking.hpp>
+
 #include <algorithm>
 #include <chrono>
 #include <filesystem>
@@ -62,104 +63,7 @@ static cv::Mat compute_harris_c(const cv::Mat& gray) {
         }
     }
     
-    // Return the response directly
     return response;
-}
-
-static Halide::Buffer<float> compute_halide_harris(const cv::Mat& gray, bool use_autoschedule) {
-  using namespace Halide;
-
-  const int width = gray.cols;
-  const int height = gray.rows;
-
-  Halide::Buffer<float> input(width, height);
-  for (int y = 0; y < height; ++y) {
-    for (int x = 0; x < width; ++x) {
-      input(x, y) = static_cast<float>(gray.at<unsigned char>(y, x));
-    }
-  }
-
-  Var x("x"), y("y");
-  Func in_f("in_f");
-  in_f(x, y) = BoundaryConditions::repeat_edge(input)(x, y);
-
-  // Sobel 3x3 - matching OpenCV
-  Func Iy("Iy");
-  Iy(x, y) = in_f(x - 1, y - 1) * (-1.0f) + in_f(x + 1, y - 1) * (1.0f) +
-             in_f(x - 1, y) * (-2.0f) + in_f(x + 1, y) * (2.0f) +
-             in_f(x - 1, y + 1) * (-1.0f) + in_f(x + 1, y + 1) * (1.0f);
-
-  Func Ix("Ix");
-  Ix(x, y) = in_f(x - 1, y - 1) * (-1.0f) + in_f(x + 1, y - 1) * (1.0f) +
-             in_f(x - 1, y) * (-2.0f) + in_f(x + 1, y) * (2.0f) +
-             in_f(x - 1, y + 1) * (-1.0f) + in_f(x + 1, y + 1) * (1.0f);
-
-  Func Ixx("Ixx");
-  Ixx(x, y) = Ix(x, y) * Ix(x, y);
-  Func Iyy("Iyy");
-  Iyy(x, y) = Iy(x, y) * Iy(x, y);
-  Func Ixy("Ixy");
-  Ixy(x, y) = Ix(x, y) * Iy(x, y);
-
-  Func Sxx("Sxx"), Syy("Syy"), Sxy("Sxy");
-  Sxx(x, y) = Ixx(x - 1, y - 1) + Ixx(x - 1, y) + Ixx(x - 1, y + 1) +
-              Ixx(x, y - 1) + Ixx(x, y) + Ixx(x, y + 1) +
-              Ixx(x + 1, y - 1) + Ixx(x + 1, y) + Ixx(x + 1, y + 1);
-  Syy(x, y) = Iyy(x - 1, y - 1) + Iyy(x - 1, y) + Iyy(x - 1, y + 1) +
-              Iyy(x, y - 1) + Iyy(x, y) + Iyy(x, y + 1) +
-              Iyy(x + 1, y - 1) + Iyy(x + 1, y) + Iyy(x + 1, y + 1);
-  Sxy(x, y) = Ixy(x - 1, y - 1) + Ixy(x - 1, y) + Ixy(x - 1, y + 1) +
-              Ixy(x, y - 1) + Ixy(x, y) + Ixy(x, y + 1) +
-              Ixy(x + 1, y - 1) + Ixy(x + 1, y) + Ixy(x + 1, y + 1);
-
-  Func det("det"), trace("trace"), out("out");
-  det(x, y) = Sxx(x, y) * Syy(x, y) - Sxy(x, y) * Sxy(x, y);
-  trace(x, y) = Sxx(x, y) + Syy(x, y);
-  out(x, y) = det(x, y) - 0.04f * trace(x, y) * trace(x, y);
-
-  if (use_autoschedule) {
-    Var yi("yi");
-    const int vec = 8;
-    const int tile_size = 32;
-    
-    out.split(y, y, yi, tile_size);
-    out.parallel(y);
-    out.vectorize(x, vec);
-    
-    in_f.compute_at(out, yi);
-    Ix.compute_at(out, yi);
-    Iy.compute_at(out, yi);
-    Ixx.compute_at(out, yi);
-    Iyy.compute_at(out, yi);
-    Ixy.compute_at(out, yi);
-    Sxx.compute_at(out, yi);
-    Syy.compute_at(out, yi);
-    Sxy.compute_at(out, yi);
-    det.compute_at(out, yi);
-    trace.compute_at(out, yi);
-  } else {
-    Var yi("yi");
-    const int vec = 8;
-    const int tile_size = 32;
-    
-    out.split(y, y, yi, tile_size);
-    out.parallel(y);
-    out.vectorize(x, vec);
-    
-    in_f.compute_at(out, yi).vectorize(x, vec);
-    Ix.compute_at(out, yi).vectorize(x, vec);
-    Iy.compute_at(out, yi).vectorize(x, vec);
-    Ixx.compute_at(out, yi).vectorize(x, vec);
-    Iyy.compute_at(out, yi).vectorize(x, vec);
-    Ixy.compute_at(out, yi).vectorize(x, vec);
-    Sxx.compute_at(out, yi).vectorize(x, vec);
-    Syy.compute_at(out, yi).vectorize(x, vec);
-    Sxy.compute_at(out, yi).vectorize(x, vec);
-    det.compute_at(out, yi).vectorize(x, vec);
-    trace.compute_at(out, yi).vectorize(x, vec);
-  }
-  
-  return out.realize({width, height});
 }
 
 static std::vector<cv::Point2f> select_points_from_response(const cv::Mat& response,
@@ -169,7 +73,6 @@ static std::vector<cv::Point2f> select_points_from_response(const cv::Mat& respo
   const int width = response.cols;
   const int height = response.rows;
 
-  // The response is already a cv::Mat, just use it directly
   const cv::Mat& resp = response;
   float max_response = 0.0f;
   for (int y = 0; y < height; ++y) {
@@ -268,27 +171,6 @@ int main(int argc, char** argv) {
   }
   double c_avg = c_total / 5.0;
   
-  // ==================== Halide Harris ====================
-  auto start = Clock::now();
-  Halide::Buffer<float> response = compute_halide_harris(gray0, false);
-  auto end = Clock::now();
-  double halide_ms = ms_since(start, end);
-  
-  // Warmup
-  for (int i = 0; i < 3; i++) {
-    Halide::Buffer<float> dummy = compute_halide_harris(gray0, false);
-  }
-  
-  // Timed runs
-  double halide_total = 0;
-  for (int i = 0; i < 5; i++) {
-    start = Clock::now();
-    Halide::Buffer<float> response2 = compute_halide_harris(gray0, false);
-    end = Clock::now();
-    halide_total += ms_since(start, end);
-  }
-  double halide_avg = halide_total / 5.0;
-
   // ==================== OpenCV Harris ====================
   cv::Mat gray0f;
   gray0.convertTo(gray0f, CV_32F, 1.0/255.0);
@@ -342,7 +224,6 @@ int main(int argc, char** argv) {
   std::cout << "[frontend] detected_points: " << detected << std::endl;
   std::cout << "[frontend] tracked_points: " << tracked << std::endl;
   std::cout << "[frontend] harris_c_ms: " << c_avg << std::endl;
-  std::cout << "[frontend] halide_ms: " << halide_avg << std::endl;
   std::cout << "[frontend] opencv_ms: " << ocv_avg << std::endl;
   std::cout << "[frontend] kp_ms: " << kp_ms << std::endl;
   std::cout << "[frontend] lk_ms: " << lk_ms << std::endl;
