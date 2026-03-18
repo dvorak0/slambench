@@ -11,16 +11,9 @@ public:
     GeneratorParam<int> generator_mode{"generator_mode", 1};
     
     Input<Buffer<uint8_t, 2>> input{"input"};
-    Output<Buffer<float, 2>> output{"output"};
+    Output<Buffer<float, 2>> output{"output", {752, 480}};
     
     void generate() {
-        Var x("x"), y("y");
-        
-        // Provide estimates for auto-scheduler
-        input.set_estimates({{0, 752}, {0, 480}});
-        output.set_estimates({{0, 752}, {0, 480}});
-        
-        // Boundary conditions
         Func in_f("in_f");
         in_f(x, y) = BoundaryConditions::repeat_edge(input)(x, y);
         
