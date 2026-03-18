@@ -1,5 +1,6 @@
 // Harris Generator - AOT compiled Harris
-// Supports both manual and auto schedule via GENERATOR_MODE
+// Supports both manual and auto schedule
+// Includes inline main() for building without external GenGen.cpp
 
 #include "Halide.h"
 
@@ -47,19 +48,19 @@ public:
     
     void schedule() {
         if (using_autoscheduler()) {
-            // Auto-scheduler needs estimates
             input.set_estimates({{0, 752}, {0, 480}});
             output.set_estimates({{0, 752}, {0, 480}});
         } else if (generator_mode == 1) {
-            // Manual schedule - optimized
             const int vec = natural_vector_size<float>();
             Var x("x"), y("y"), yi("yi");
-            
-            output.split(y, y, yi, 32)
-                .parallel(y)
-                .vectorize(x, vec);
+            output.split(y, y, yi, 32).parallel(y).vectorize(x, vec);
         }
     }
 };
 
 HALIDE_REGISTER_GENERATOR(Harris, harris)
+
+// Inline main() - no need for external GenGen.cpp
+int main(int argc, char **argv) {
+    return Halide::Internal::generate_filter_main(argc, argv);
+}

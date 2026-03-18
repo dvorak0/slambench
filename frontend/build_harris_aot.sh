@@ -1,12 +1,11 @@
 #!/bin/bash
 # Build AOT Harris Generator - produces static library
-# Output: harris_manual.a, harris_manual.h, harris_auto.a, harris_auto.h
+# No external GenGen.cpp needed (inlined)
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HALIDE_ROOT=/usr/local/lib/python3.10/dist-packages/halide
-HALIDE_SRC=/halide
 
 cd $SCRIPT_DIR
 
@@ -14,13 +13,11 @@ echo "=========================================="
 echo "HALIDE AOT Harris Generator"
 echo "=========================================="
 
-# Step 1: Compile generator
+# Step 1: Compile generator (no GenGen.cpp needed)
 echo "[1/3] Compiling Harris generator..."
 g++ harris_generator.cpp \
-    $HALIDE_SRC/tools/GenGen.cpp \
     -g -std=c++17 -fno-rtti \
     -I $HALIDE_ROOT/include \
-    -I $HALIDE_SRC/src \
     -L $HALIDE_ROOT/lib64 \
     -lHalide -lpthread -ldl \
     -o harris_generator
