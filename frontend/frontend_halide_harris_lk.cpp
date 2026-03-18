@@ -36,38 +36,36 @@ static Halide::Buffer<float> compute_halide_harris(const cv::Mat& gray, bool use
   Func in_f("in_f");
   in_f(x, y) = BoundaryConditions::repeat_edge(input)(x, y);
 
-  Func Iy("Iy");
-  Iy(x, y) = in_f(x - 1, y - 1) * (-1.0f / 12.0f) + in_f(x - 1, y + 1) * (1.0f / 12.0f) +
+  // Sobel-like gradients, close to OpenCV's Dx/Dy stage.
+  Func dx("dx"), dy("dy");
+  dx(x, y) = in_f(x - 1, y - 1) * (-1.0f / 12.0f) + in_f(x + 1, y - 1) * (1.0f / 12.0f) +
+             in_f(x - 1, y) * (-2.0f / 12.0f) + in_f(x + 1, y) * (2.0f / 12.0f) +
+             in_f(x - 1, y + 1) * (-1.0f / 12.0f) + in_f(x + 1, y + 1) * (1.0f / 12.0f);
+  dy(x, y) = in_f(x - 1, y - 1) * (-1.0f / 12.0f) + in_f(x - 1, y + 1) * (1.0f / 12.0f) +
              in_f(x, y - 1) * (-2.0f / 12.0f) + in_f(x, y + 1) * (2.0f / 12.0f) +
              in_f(x + 1, y - 1) * (-1.0f / 12.0f) + in_f(x + 1, y + 1) * (1.0f / 12.0f);
 
-  Func Ix("Ix");
-  Ix(x, y) = in_f(x - 1, y - 1) * (-1.0f / 12.0f) + in_f(x + 1, y - 1) * (1.0f / 12.0f) +
-             in_f(x - 1, y) * (-2.0f / 12.0f) + in_f(x + 1, y) * (2.0f / 12.0f) +
-             in_f(x - 1, y + 1) * (-1.0f / 12.0f) + in_f(x + 1, y + 1) * (1.0f / 12.0f);
+  // OpenCV-like covariance packing stage: dx*dx, dx*dy, dy*dy.
+  Func cov_xx("cov_xx"), cov_xy("cov_xy"), cov_yy("cov_yy");
+  cov_xx(x, y) = dx(x, y) * dx(x, y);
+  cov_xy(x, y) = dx(x, y) * dy(x, y);
+  cov_yy(x, y) = dy(x, y) * dy(x, y);
 
-  Func Ixx("Ixx");
-  Ixx(x, y) = Ix(x, y) * Ix(x, y);
-  Func Iyy("Iyy");
-  Iyy(x, y) = Iy(x, y) * Iy(x, y);
-  Func Ixy("Ixy");
-  Ixy(x, y) = Ix(x, y) * Iy(x, y);
+  // 3x3 box filter as separable horizontal + vertical sums.
+  Func cov_xx_h("cov_xx_h"), cov_xy_h("cov_xy_h"), cov_yy_h("cov_yy_h");
+  cov_xx_h(x, y) = cov_xx(x - 1, y) + cov_xx(x, y) + cov_xx(x + 1, y);
+  cov_xy_h(x, y) = cov_xy(x - 1, y) + cov_xy(x, y) + cov_xy(x + 1, y);
+  cov_yy_h(x, y) = cov_yy(x - 1, y) + cov_yy(x, y) + cov_yy(x + 1, y);
 
-  Func Sxx("Sxx"), Syy("Syy"), Sxy("Sxy");
-  Sxx(x, y) = Ixx(x - 1, y - 1) + Ixx(x - 1, y) + Ixx(x - 1, y + 1) +
-              Ixx(x, y - 1) + Ixx(x, y) + Ixx(x, y + 1) +
-              Ixx(x + 1, y - 1) + Ixx(x + 1, y) + Ixx(x + 1, y + 1);
-  Syy(x, y) = Iyy(x - 1, y - 1) + Iyy(x - 1, y) + Iyy(x - 1, y + 1) +
-              Iyy(x, y - 1) + Iyy(x, y) + Iyy(x, y + 1) +
-              Iyy(x + 1, y - 1) + Iyy(x + 1, y) + Iyy(x + 1, y + 1);
-  Sxy(x, y) = Ixy(x - 1, y - 1) + Ixy(x - 1, y) + Ixy(x - 1, y + 1) +
-              Ixy(x, y - 1) + Ixy(x, y) + Ixy(x, y + 1) +
-              Ixy(x + 1, y - 1) + Ixy(x + 1, y) + Ixy(x + 1, y + 1);
+  Func sum_xx("sum_xx"), sum_xy("sum_xy"), sum_yy("sum_yy");
+  sum_xx(x, y) = cov_xx_h(x, y - 1) + cov_xx_h(x, y) + cov_xx_h(x, y + 1);
+  sum_xy(x, y) = cov_xy_h(x, y - 1) + cov_xy_h(x, y) + cov_xy_h(x, y + 1);
+  sum_yy(x, y) = cov_yy_h(x, y - 1) + cov_yy_h(x, y) + cov_yy_h(x, y + 1);
 
-  Func det("det"), trace("trace"), out("out");
-  det(x, y) = Sxx(x, y) * Syy(x, y) - Sxy(x, y) * Sxy(x, y);
-  trace(x, y) = Sxx(x, y) + Syy(x, y);
-  out(x, y) = det(x, y) - 0.04f * trace(x, y) * trace(x, y);
+  Func out("out");
+  Expr det = sum_xx(x, y) * sum_yy(x, y) - sum_xy(x, y) * sum_xy(x, y);
+  Expr trace = sum_xx(x, y) + sum_yy(x, y);
+  out(x, y) = det - 0.04f * trace * trace;
 
   if (use_autoschedule) {
     load_plugin("/usr/local/lib/python3.10/dist-packages/halide/lib64/libautoschedule_mullapudi2016.so");
@@ -80,10 +78,21 @@ static Halide::Buffer<float> compute_halide_harris(const cv::Mat& gray, bool use
     params.extra["balance"] = "40";
     pipeline.apply_autoscheduler(target, params);
   } else {
-    // Manual schedule
-    out.vectorize(x, 8).parallel(y);
+    Var yo("yo"), yi("yi");
+    out.split(y, yo, yi, 32).parallel(yo).vectorize(x, 8);
+    cov_xx_h.compute_at(out, yo).vectorize(x, 8);
+    cov_xy_h.compute_at(out, yo).vectorize(x, 8);
+    cov_yy_h.compute_at(out, yo).vectorize(x, 8);
+    sum_xx.compute_at(out, yi).vectorize(x, 8);
+    sum_xy.compute_at(out, yi).vectorize(x, 8);
+    sum_yy.compute_at(out, yi).vectorize(x, 8);
+    cov_xx.compute_at(out, yi).vectorize(x, 8);
+    cov_xy.compute_at(out, yi).vectorize(x, 8);
+    cov_yy.compute_at(out, yi).vectorize(x, 8);
+    dx.compute_at(out, yi).vectorize(x, 8);
+    dy.compute_at(out, yi).vectorize(x, 8);
   }
-  
+
   return out.realize({width, height});
 }
 
