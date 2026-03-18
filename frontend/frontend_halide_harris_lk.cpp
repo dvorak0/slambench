@@ -119,7 +119,7 @@ static Halide::Buffer<float> compute_halide_harris(const cv::Mat& gray, bool use
     trace.compute_at(out, yi);
     trace.vectorize(x, vec);
   } else {
-    // Manual schedule: tile + vectorize + parallel
+    // Manual schedule: store_at + compute_at + compute_with
     Var yi("yi");
     const int vec = 8;
     const int tile_size = 32;
@@ -128,17 +128,32 @@ static Halide::Buffer<float> compute_halide_harris(const cv::Mat& gray, bool use
     out.parallel(y);
     out.vectorize(x, vec);
     
-    in_f.compute_at(out, yi).vectorize(x, vec);
-    Ix.compute_at(out, yi).vectorize(x, vec);
-    Iy.compute_at(out, yi).vectorize(x, vec);
-    Ixx.compute_at(out, yi).vectorize(x, vec);
-    Iyy.compute_at(out, yi).vectorize(x, vec);
-    Ixy.compute_at(out, yi).vectorize(x, vec);
-    Sxx.compute_at(out, yi).vectorize(x, vec);
-    Syy.compute_at(out, yi).vectorize(x, vec);
-    Sxy.compute_at(out, yi).vectorize(x, vec);
-    det.compute_at(out, yi).vectorize(x, vec);
-    trace.compute_at(out, yi).vectorize(x, vec);
+    // Input: store at outer tile, compute at inner tile
+    in_f.store_at(out, y).compute_at(out, yi).vectorize(x, vec);
+    
+    // Gradients: store at outer tile, compute at inner tile, compute_with for fusion
+    Ix.store_at(out, y).compute_at(out, yi).vectorize(x, vec);
+    Iy.store_at(out, y).compute_at(out, yi).vectorize(x, vec);
+    Ix.compute_with(Iy, x);
+    
+    // Covariance
+    Ixx.store_at(out, y).compute_at(out, yi).vectorize(x, vec);
+    Iyy.store_at(out, y).compute_at(out, yi).vectorize(x, vec);
+    Ixy.store_at(out, y).compute_at(out, yi).vectorize(x, vec);
+    Ixx.compute_with(Iyy, x);
+    Ixx.compute_with(Ixy, x);
+    
+    // Box sums
+    Sxx.store_at(out, y).compute_at(out, yi).vectorize(x, vec);
+    Syy.store_at(out, y).compute_at(out, yi).vectorize(x, vec);
+    Sxy.store_at(out, y).compute_at(out, yi).vectorize(x, vec);
+    Sxx.compute_with(Syy, x);
+    Sxx.compute_with(Sxy, x);
+    
+    // Final
+    det.store_at(out, y).compute_at(out, yi).vectorize(x, vec);
+    trace.store_at(out, y).compute_at(out, yi).vectorize(x, vec);
+    det.compute_with(trace, x);
   }
   
   return out.realize({width, height});
