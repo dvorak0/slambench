@@ -21,7 +21,7 @@ static double ms_since(const Clock::time_point& start, const Clock::time_point& 
 
 // Global pipeline for Halide Harris (built once)
 struct HalideHarrisPipeline {
-  Halide::Func out;
+  Halide::Pipeline pipeline;
   Halide::Target target;
   Halide::Buffer<uint8_t> input_buf;
   Halide::Buffer<float> output_buf;
@@ -36,8 +36,11 @@ struct HalideHarrisPipeline {
     const int width = gray.cols;
     const int height = gray.rows;
     
-    // Pre-allocate input buffer
+    // Pre-allocate buffers
     input_buf = Halide::Buffer<uint8_t>(width, height);
+    output_buf = Halide::Buffer<float>(width, height);
+    
+    // Copy input data once
     for (int y = 0; y < height; ++y) {
       for (int x = 0; x < width; ++x) {
         input_buf(x, y) = gray.at<unsigned char>(y, x);
@@ -80,6 +83,7 @@ struct HalideHarrisPipeline {
     Func det("det"), trace("trace");
     det(x, y) = Sxx(x, y) * Syy(x, y) - Sxy(x, y) * Sxy(x, y);
     trace(x, y) = Sxx(x, y) + Syy(x, y);
+    Func out("out");
     out(x, y) = det(x, y) - 0.04f * trace(x, y) * trace(x, y);
     
     // Schedule - matching official Halide Harris
@@ -104,8 +108,8 @@ struct HalideHarrisPipeline {
     
     Ix.compute_with(Iy, x);
     
-    // Pre-allocate output buffer
-    output_buf = Halide::Buffer<float>(input_buf.width(), input_buf.height());
+    // Create Pipeline
+    pipeline = Pipeline(out);
     
     // Get JIT target
     target = Halide::get_jit_target_from_environment();
@@ -116,7 +120,9 @@ struct HalideHarrisPipeline {
   // Explicitly compile the pipeline (call this before timing loop)
   void compile() {
     if (compiled) return;
-    out.realize(output_buf);
+    pipeline.compile_jit(target);
+    // Run once to compile
+    pipeline.realize({input_buf, output_buf});
     compiled = true;
   }
   
@@ -134,8 +140,8 @@ struct HalideHarrisPipeline {
   Halide::Buffer<float> run(const cv::Mat& gray) {
     // Update input data
     update_input(gray);
-    // Re-use the pre-allocated buffer
-    out.realize(output_buf);
+    // Re-use the pre-allocated buffers via Pipeline API
+    pipeline.realize({input_buf, output_buf});
     return output_buf;
   }
 };
