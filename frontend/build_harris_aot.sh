@@ -1,6 +1,5 @@
 #!/bin/bash
-# Build AOT-compiled Harris
-# Based on the successful nixos workflow
+# Build AOT-compiled Harris using Generator
 
 set -e
 
@@ -8,26 +7,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HALIDE_ROOT=/usr/local/lib/python3.10/dist-packages/halide
 HALIDE_SRC=/tmp/halide
 
-echo "=========================================="
-echo "HALIDE AOT Harris Builder"
-echo "=========================================="
-echo "HALIDE_ROOT: $HALIDE_ROOT"
-echo "HALIDE_SRC: $HALIDE_SRC"
-echo "Working dir: $SCRIPT_DIR"
-echo ""
-
-# Step 1: Get Halide source if not present (on host)
-if [ ! -d "$HALIDE_SRC" ]; then
-    echo "[1/6] Cloning Halide source to host..."
-    git clone --depth 1 https://github.com/halide/Halide.git $HALIDE_SRC
-else
-    echo "[1/6] Halide source already present on host"
-fi
-
 cd $SCRIPT_DIR
 
-# Step 2: Compile the Harris generator
-echo "[2/6] Compiling Harris generator..."
+echo "=========================================="
+echo "HALIDE AOT Harris Builder (Generator)"
+echo "=========================================="
+
+# Step 1: Compile generator
+echo "[1/4] Compiling Harris generator..."
 g++ harris_generator.cpp \
     $HALIDE_SRC/tools/GenGen.cpp \
     -g -std=c++17 -fno-rtti \
@@ -37,10 +24,8 @@ g++ harris_generator.cpp \
     -lHalide -lpthread -ldl \
     -o harris_generator
 
-echo "Generator compiled: harris_generator"
-
-# Step 3: Generate AOT with manual schedule
-echo "[3/6] Generating AOT (manual schedule)..."
+# Step 2: Generate AOT (manual schedule)
+echo "[2/4] Generating AOT (manual schedule)..."
 ./harris_generator \
     -o . \
     -g harris \
@@ -48,10 +33,10 @@ echo "[3/6] Generating AOT (manual schedule)..."
     -e static_library,h,schedule \
     target=host
 
-echo "Generated: harris_manual.a"
+echo "Generated: harris_manual.a, harris_manual.h"
 
-# Step 4: Generate AOT with auto schedule
-echo "[4/6] Generating AOT (auto schedule)..."
+# Step 3: Generate AOT (auto schedule)
+echo "[3/4] Generating AOT (auto schedule)..."
 ./harris_generator \
     -o . \
     -g harris \
@@ -64,16 +49,16 @@ echo "[4/6] Generating AOT (auto schedule)..."
     autoscheduler.last_level_cache_size=16777216 \
     autoscheduler.balance=40
 
-echo "Generated: harris_auto.a"
+echo "Generated: harris_auto.a, harris_auto.h"
 
-# Step 5: Build test runner
-echo "[5/6] Building test runner..."
+# Step 4: Build test runner
+echo "[4/4] Building test runner..."
 
-cat > harris_test.cpp << 'EOF'
-#include <Halide.h>
+cat > harris_aot_test.cpp << 'EOF'
+#include "harris_manual.h"
+#include <opencv2/opencv.hpp>
 #include <iostream>
 #include <chrono>
-#include <opencv2/opencv.hpp>
 
 using namespace Halide;
 using namespace std;
@@ -82,24 +67,26 @@ using namespace std::chrono;
 int main(int argc, char** argv) {
     const char* input_path = argv[1] ? argv[1] : "/workspace/data/euroc/frame0.png";
     
-    // Load image
     cv::Mat img = cv::imread(input_path, cv::IMREAD_GRAYSCALE);
     if (img.empty()) {
         cerr << "Failed to load: " << input_path << endl;
         return 1;
     }
     
-    // Convert to Buffer
-    Buffer<uint8_t> input(img.cols, img.rows);
-    for (int y = 0; y < img.rows; y++) {
-        for (int x = 0; x < img.cols; x++) {
+    int W = img.cols;
+    int H = img.rows;
+    cout << "Image: " << W << "x" << H << endl;
+    
+    Buffer<uint8_t, 2> input(W, H);
+    for (int y = 0; y < H; y++) {
+        for (int x = 0; x < W; x++) {
             input(x, y) = img.at<uint8_t>(y, x);
         }
     }
     
-    Buffer<float> output(img.cols, img.rows);
+    Buffer<float, 2> output(W, H);
     
-    // Call the AOT-compiled function
+    // Call AOT function
     harris_manual(input, output);
     
     // Time it
@@ -118,26 +105,20 @@ int main(int argc, char** argv) {
 }
 EOF
 
-g++ harris_test.cpp \
+g++ harris_aot_test.cpp \
     harris_manual.a \
     -std=c++17 \
     -I $HALIDE_ROOT/include \
     -I $HALIDE_SRC \
     -ldl -lpthread \
-    -o harris_test
+    -lopencv_core -lopencv_imgcodecs \
+    -o harris_aot_test
 
-echo "Test runner built: harris_test"
+echo "Built: harris_aot_test"
 
-# Step 6: Run test
-echo "[6/6] Running test..."
 echo ""
-
-if [ -f "/workspace/data/euroc/frame0.png" ]; then
-    ./harris_test /workspace/data/euroc/frame0.png
-else
-    # Try without args
-    ./harris_test
-fi
+echo "Running test..."
+./harris_aot_test /workspace/data/euroc/frame0.png
 
 echo ""
 echo "=========================================="
