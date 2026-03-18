@@ -76,44 +76,57 @@ int main(int argc, char** argv) {
   double harris_ms = ms_since(harris_start, harris_end);
 
   // ========================================
-  // Feature selection - similar to goodFeaturesToTrack
+  // Feature selection - same as goodFeaturesToTrack (with NMS)
   // ========================================
   std::vector<cv::Point2f> points0;
   
-  // Collect all corners above threshold
-  struct Corner {
-    float x, y, response;
-  };
-  std::vector<Corner> corners;
-  float qualityLevel = 0.01;
-  float minDistance = 10.0;
-  
+  // Convert Halide response to OpenCV mat
+  cv::Mat harris_mat(H, W, CV_32FC1);
   for (int y = 0; y < H; y++) {
     for (int x = 0; x < W; x++) {
-      float r = harris_response(x, y);
-      if (r > qualityLevel) {
-        corners.push_back({(float)x, (float)y, r});
+      harris_mat.at<float>(y, x) = harris_response(x, y);
+    }
+  }
+  
+  // Find max response
+  double max_response;
+  cv::minMaxLoc(harris_mat, nullptr, &max_response);
+  
+  float threshold = max_response * 0.01f;
+  
+  // Dilate for non-maximum suppression
+  cv::Mat dilated;
+  cv::dilate(harris_mat, dilated, cv::Mat());
+  
+  // Collect corners that are local maxima
+  std::vector<cv::Point2f> corners;
+  for (int y = 1; y < H - 1; y++) {
+    for (int x = 1; x < W - 1; x++) {
+      float val = harris_mat.at<float>(y, x);
+      if (val >= threshold && val == dilated.at<float>(y, x)) {
+        corners.emplace_back(x, y);
       }
     }
   }
   
-  // Sort by response (descending)
-  std::sort(corners.begin(), corners.end(), 
-             [](const Corner& a, const Corner& b) { return a.response > b.response; });
+  // Sort by response (descending) and apply min distance
+  std::sort(corners.begin(), corners.end(), [&](const cv::Point2f& a, const cv::Point2f& b) {
+    return harris_mat.at<float>(a.y, a.x) > harris_mat.at<float>(b.y, b.x);
+  });
   
-  // Non-maximum suppression - keep points with min distance
+  float minDist = 10.0f;
   for (const auto& c : corners) {
     bool tooClose = false;
     for (const auto& p : points0) {
       float dx = c.x - p.x;
       float dy = c.y - p.y;
-      if (dx*dx + dy*dy < minDistance*minDistance) {
+      if (dx*dx + dy*dy < minDist*minDist) {
         tooClose = true;
         break;
       }
     }
     if (!tooClose) {
-      points0.emplace_back(c.x, c.y);
+      points0.push_back(c);
     }
     if (points0.size() >= 500) break;
   }
