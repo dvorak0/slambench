@@ -54,7 +54,7 @@ int main(int argc, char** argv) {
 
   const int W = gray0.cols;
   const int H = gray0.rows;
-  std::cout << "Image: " << W << "x" << H << std::endl;
+  std::cout << "image_size: " << W << "x" << H << "\n";
 
   // ========================================
   // Halide Harris (auto-scheduled)
