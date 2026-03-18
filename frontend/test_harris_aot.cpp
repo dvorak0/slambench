@@ -1,5 +1,6 @@
-// Simple AOT Harris
+// Simple AOT Harris with real image
 #include "Halide.h"
+#include <opencv2/opencv.hpp>
 #include <iostream>
 #include <chrono>
 
@@ -8,14 +9,24 @@ using namespace std;
 using namespace std::chrono;
 
 int main(int argc, char** argv) {
-    const int W = 752;
-    const int H = 480;
+    const char* input_path = argv[1] ? argv[1] : "/workspace/data/euroc/frame0.png";
     
-    // Use Buffer for input
+    // Load image
+    cv::Mat img = cv::imread(input_path, cv::IMREAD_GRAYSCALE);
+    if (img.empty()) {
+        cerr << "Failed to load: " << input_path << endl;
+        return 1;
+    }
+    
+    int W = img.cols;
+    int H = img.rows;
+    cout << "Image: " << W << "x" << H << endl;
+    
+    // Convert to Buffer
     Buffer<uint8_t> input(W, H);
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
-            input(x, y) = (x + y) % 256;
+            input(x, y) = img.at<uint8_t>(y, x);
         }
     }
     
@@ -61,9 +72,8 @@ int main(int argc, char** argv) {
     out.compile_jit(t);
     cout << "Compiled" << endl;
     
-    // Realize
+    // Warmup
     out.realize(output);
-    cout << "Realized" << endl;
     
     // Time it
     const int runs = 5;
