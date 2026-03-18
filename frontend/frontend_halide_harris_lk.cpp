@@ -133,15 +133,13 @@ int main(int argc, char** argv) {
     if (status[i]) tracked++;
   }
 
-  // Report
-  std::cout << "=======================================\n";
-  std::cout << "Results:\n";
-  std::cout << "  Harris:     " << harris_ms << " ms\n";
-  std::cout << "  Optical Flow: " << of_ms << " ms\n";
-  std::cout << "  Total:     " << (harris_ms + of_ms) << " ms\n";
-  std::cout << "  Keypoints:  " << points0.size() << "\n";
-  std::cout << "  Tracked:   " << tracked << "\n";
-  std::cout << "=======================================\n";
+  // Report (SLAMBench format)
+  std::cout << "detected_points: " << points0.size() << "\n";
+  std::cout << "tracked_points: " << tracked << "\n";
+  std::cout << "halide_response_ms: " << harris_ms << "\n";
+  std::cout << "halide_post_ms: " << 0.0 << "\n";  // No post-processing
+  std::cout << "lk_ms: " << of_ms << "\n";
+  std::cout << "total_ms: " << (harris_ms + of_ms) << "\n";
 
   return 0;
 }
