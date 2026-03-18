@@ -70,6 +70,7 @@ static Halide::Buffer<float> compute_halide_harris(const cv::Mat& gray, bool use
   out(x, y) = det(x, y) - 0.04f * trace(x, y) * trace(x, y);
 
   if (use_autoschedule) {
+    load_plugin("/usr/local/lib/python3.10/dist-packages/halide/lib64/libautoschedule_mullapudi2016.so");
     out.set_estimate(x, 0, width).set_estimate(y, 0, height);
     Pipeline pipeline(out);
     Target target = get_host_target();
