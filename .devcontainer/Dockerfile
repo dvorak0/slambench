@@ -85,18 +85,16 @@ RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && \
     cmake --build build -j"$(nproc)" --target \
       msckf_runner msckf_runner_rr msckf_runner_rc msckf_runner_cr msckf_runner_cc msckf_runner_openblas
 
-# Install Halide binary wheel and newer CMake in the late experiment layer only.
-# This keeps earlier heavy build layers cached.
-RUN python3 -m pip install --no-cache-dir cmake halide
+RUN python3 -m pip install --no-cache-dir halide
 
-# Build the experimental Halide frontend on top of the existing frontend build dir.
-# Do not clear build/, so stable frontend binaries remain cached and available.
-WORKDIR /opt/slambench/frontend
-COPY frontend/CMakeLists.txt /opt/slambench/frontend/
-COPY frontend/frontend_halide_harris_lk.cpp /opt/slambench/frontend/
-RUN HALIDE_ROOT="$(python3 -c 'import halide; print(halide.install_dir())')" && \
-    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$HALIDE_ROOT" && \
-    cmake --build build -j"$(nproc)" --target frontend_harris_lk frontend_orb_bf frontend_halide_harris_lk
+## Build the experimental Halide frontend on top of the existing frontend build dir.
+## Do not clear build/, so stable frontend binaries remain cached and available.
+#WORKDIR /opt/slambench/frontend
+#COPY frontend/CMakeLists.txt /opt/slambench/frontend/
+#COPY frontend/frontend_halide_harris_lk.cpp /opt/slambench/frontend/
+#RUN HALIDE_ROOT="$(python3 -c 'import halide; print(halide.install_dir())')" && \
+#    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$HALIDE_ROOT" && \
+#    cmake --build build -j"$(nproc)" --target frontend_harris_lk frontend_orb_bf frontend_halide_harris_lk
 
 # Copy scripts/data into the image workspace last so script-only edits keep prior layers cached.
 WORKDIR /workspace

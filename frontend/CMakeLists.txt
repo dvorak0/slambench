@@ -13,9 +13,6 @@ target_link_libraries(frontend_harris_lk PRIVATE ${OpenCV_LIBS})
 add_executable(frontend_orb_bf frontend_orb_bf.cpp)
 target_link_libraries(frontend_orb_bf PRIVATE ${OpenCV_LIBS})
 
-add_executable(frontend_harris_c frontend_harris_c.cpp)
-target_link_libraries(frontend_harris_c PRIVATE ${OpenCV_LIBS})
-
 # Halide include path
 set(HALIDE_INCLUDE_DIR "/usr/local/lib/python3.10/dist-packages/halide/include")
 
