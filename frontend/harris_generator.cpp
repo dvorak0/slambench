@@ -41,6 +41,12 @@ public:
         // Harris response
         output(x, y) = (Sxx(x,y)*Syy(x,y) - Sxy(x,y)*Sxy(x,y)) - 0.04f * (Sxx(x,y) + Syy(x,y)) * (Sxx(x,y) + Syy(x,y));
     }
+    
+    void schedule() {
+        // Simple but effective schedule
+        Var yi;
+        output.split(y, y, yi, 32).parallel(y).vectorize(x, 8);
+    }
 };
 
 HALIDE_REGISTER_GENERATOR(Harris, harris)
