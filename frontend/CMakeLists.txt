@@ -42,3 +42,18 @@ else()
     message(WARNING "Halide not found, frontend_halide_harris_lk will not be built")
   endif()
 endif()
+
+# Harris AOT test (links against generator-produced static library)
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/harris_manual.h AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/harris_manual.a)
+  message(STATUS "Found Harris AOT library, adding harris_aot_test")
+  add_executable(harris_aot_test harris_aot_test.cpp)
+  target_include_directories(harris_aot_test PRIVATE 
+    ${HALIDE_INCLUDE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}
+  )
+  target_link_libraries(harris_aot_test PRIVATE 
+    ${OpenCV_LIBS} 
+    ${CMAKE_CURRENT_SOURCE_DIR}/harris_manual.a 
+    dl pthread
+  )
+endif()
