@@ -43,8 +43,7 @@ public:
     }
     
     void schedule() {
-        // Simple but effective schedule
-        Var yi;
+        Var x("x"), y("y"), yi;
         output.split(y, y, yi, 32).parallel(y).vectorize(x, 8);
     }
 };
