@@ -13,6 +13,8 @@ RUN apt-get update && \
       libtinfo-dev \
       zlib1g-dev \
       libxml2-dev \
+      libcurl4-openssl-dev \
+      libedit-dev \
       curl \
       ca-certificates \
       gnupg \
@@ -29,7 +31,7 @@ RUN bash -lc 'set -euo pipefail; \
     chmod +x /tmp/llvm.sh; \
     /tmp/llvm.sh 21; \
     apt-get update; \
-    apt-get install -y --no-install-recommends llvm-21 llvm-21-dev clang-21 lld-21 liblld-21-dev; \
+    apt-get install -y --no-install-recommends llvm-21 llvm-21-dev clang-21 libclang-21-dev lld-21 liblld-21-dev; \
     rm -rf /var/lib/apt/lists/* /tmp/llvm.sh'
 
 ENV CC=clang-21 \
