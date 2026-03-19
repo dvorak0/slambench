@@ -73,7 +73,9 @@ RUN bash -lc 'set -euo pipefail; \
 
 RUN cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
       -DFlatBuffers_DIR=/usr/lib/x86_64-linux-gnu/cmake/flatbuffers \
-      -DHalide_WASM_BACKEND=OFF && \
+      -DHalide_WASM_BACKEND=OFF \
+      -DWITH_PYTHON_BINDINGS=OFF \
+      -DWITH_PYTHON_STUBS=OFF && \
     cmake --build build -j1
 
 RUN test -f /opt/halide/build/src/Halide.h || test -f /opt/halide/include/Halide.h
