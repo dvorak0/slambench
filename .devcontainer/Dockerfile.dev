@@ -16,33 +16,27 @@ RUN apt-get update && \
       libcurl4-openssl-dev \
       libedit-dev \
       curl \
-      ca-certificates \
-      gnupg \
-      lsb-release \
-      software-properties-common \
-      wget && \
+      wget \
+      xz-utils \
+      ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
 # Halide currently requires CMake >= 3.28
 RUN python3 -m pip install --no-cache-dir "cmake>=3.28"
 
-# Install LLVM/Clang/LLD 21 from apt.llvm.org with retries, minimal packages only.
-RUN bash -lc 'set -euo pipefail; \
-    mkdir -p /etc/apt/keyrings; \
-    curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor -o /etc/apt/keyrings/llvm.gpg; \
-    echo "deb [signed-by=/etc/apt/keyrings/llvm.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-21 main" > /etc/apt/sources.list.d/llvm.list; \
-    printf "Acquire::Retries \"10\";\nAcquire::http::Timeout \"30\";\nAcquire::https::Timeout \"30\";\n" > /etc/apt/apt.conf.d/80-retries; \
-    apt-get update; \
-    apt-get install -y --fix-missing --no-install-recommends \
-      llvm-21 llvm-21-dev \
-      clang-21 libclang-21-dev \
-      lld-21 liblld-21-dev'
+# Install LLVM 21 from official prebuilt tarball instead of apt.llvm.org packages.
+RUN mkdir -p /opt/llvm-21 && \
+    wget -O /tmp/llvm21.tar.xz https://github.com/llvm/llvm-project/releases/download/llvmorg-21.1.8/LLVM-21.1.8-Linux-X64.tar.xz && \
+    tar -xf /tmp/llvm21.tar.xz -C /opt/llvm-21 --strip-components=1 && \
+    rm -f /tmp/llvm21.tar.xz
 
-ENV CC=clang-21 \
-    CXX=clang++-21 \
-    LLVM_DIR=/usr/lib/llvm-21/lib/cmake/llvm \
-    Clang_DIR=/usr/lib/llvm-21/lib/cmake/clang \
-    LLD_DIR=/usr/lib/llvm-21/lib/cmake/lld
+ENV PATH=/opt/llvm-21/bin:$PATH \
+    LD_LIBRARY_PATH=/opt/llvm-21/lib:$LD_LIBRARY_PATH \
+    CC=clang \
+    CXX=clang++ \
+    LLVM_DIR=/opt/llvm-21/lib/cmake/llvm \
+    Clang_DIR=/opt/llvm-21/lib/cmake/clang \
+    LLD_DIR=/opt/llvm-21/lib/cmake/lld
 
 WORKDIR /opt/halide
 COPY third_party/Halide/ /opt/halide/
