@@ -73,7 +73,10 @@ RUN cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
       -DFlatBuffers_DIR=/usr/local/lib/cmake/FlatBuffers \
       -DHalide_WASM_BACKEND=OFF \
       -DWITH_PYTHON_BINDINGS=OFF \
-      -DWITH_PYTHON_STUBS=OFF && \
+      -DWITH_TESTS=OFF \
+      -DWITH_TUTORIALS=OFF \
+      -DWITH_UTILS=OFF \
+      -DWITH_AUTOSCHEDULERS=ON && \
     cmake --build build -j1 && \
     cmake --install build
 
