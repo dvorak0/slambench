@@ -15,6 +15,7 @@ RUN apt-get update && \
       libxml2-dev \
       libcurl4-openssl-dev \
       libedit-dev \
+      libzstd-dev \
       flatbuffers-compiler \
       libflatbuffers-dev \
       curl \
@@ -36,10 +37,13 @@ RUN bash -lc 'set -euo pipefail; \
     echo "deb [signed-by=/etc/apt/keyrings/llvm.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-21 main" > /etc/apt/sources.list.d/llvm.list; \
     printf "Acquire::Retries \"10\";\nAcquire::http::Timeout \"30\";\nAcquire::https::Timeout \"30\";\n" > /etc/apt/apt.conf.d/80-retries; \
     apt-get update; \
-    apt-get install -y --fix-missing --no-install-recommends \
-      llvm-21 llvm-21-dev \
-      clang-21 libclang-21-dev \
-      lld-21 liblld-21-dev; \
+    for i in 1 2 3 4 5; do \
+      apt-get install -y --fix-missing --no-install-recommends \
+        llvm-21 llvm-21-dev \
+        clang-21 libclang-21-dev \
+        lld-21 liblld-21-dev && break || { echo "llvm install retry $i"; sleep 15; }; \
+    done; \
+    dpkg -s llvm-21 llvm-21-dev clang-21 libclang-21-dev lld-21 liblld-21-dev >/dev/null; \
     if [ -f /usr/lib/x86_64-linux-gnu/cmake/flatbuffers/FlatbuffersConfig.cmake ]; then \
       ln -sf /usr/lib/x86_64-linux-gnu/cmake/flatbuffers/FlatbuffersConfig.cmake /usr/lib/x86_64-linux-gnu/cmake/flatbuffers/FlatBuffersConfig.cmake; \
       ln -sf /usr/lib/x86_64-linux-gnu/cmake/flatbuffers/FlatbuffersConfigVersion.cmake /usr/lib/x86_64-linux-gnu/cmake/flatbuffers/FlatBuffersConfigVersion.cmake; \
@@ -49,12 +53,26 @@ ENV CC=clang-21 \
     CXX=clang++-21 \
     LLVM_DIR=/usr/lib/llvm-21/lib/cmake/llvm \
     Clang_DIR=/usr/lib/llvm-21/lib/cmake/clang \
-    LLD_DIR=/usr/lib/llvm-21/lib/cmake/lld
+    LLD_DIR=/usr/lib/llvm-21/lib/cmake/lld \
+    CMAKE_PREFIX_PATH=/usr/lib/x86_64-linux-gnu/cmake/flatbuffers
 
 WORKDIR /opt/halide
 COPY third_party/Halide/ /opt/halide/
 
-RUN cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release && \
+# Ubuntu's flatbuffers package installs FlatbuffersConfig.cmake (lower-case b),
+# while Halide looks for FlatBuffersConfig.cmake. Provide the expected alias.
+RUN bash -lc 'set -euo pipefail; \
+    fb_dir=/usr/lib/x86_64-linux-gnu/cmake/flatbuffers; \
+    if [ -f "$fb_dir/FlatbuffersConfig.cmake" ] && [ ! -f "$fb_dir/FlatBuffersConfig.cmake" ]; then \
+      ln -sf "$fb_dir/FlatbuffersConfig.cmake" "$fb_dir/FlatBuffersConfig.cmake"; \
+    fi; \
+    if [ -f "$fb_dir/FlatbuffersConfigVersion.cmake" ] && [ ! -f "$fb_dir/FlatBuffersConfigVersion.cmake" ]; then \
+      ln -sf "$fb_dir/FlatbuffersConfigVersion.cmake" "$fb_dir/FlatBuffersConfigVersion.cmake"; \
+    fi; \
+    ls -la "$fb_dir"'
+
+RUN cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+      -DFlatBuffers_DIR=/usr/lib/x86_64-linux-gnu/cmake/flatbuffers && \
     cmake --build build -j1
 
 RUN test -f /opt/halide/build/src/Halide.h || test -f /opt/halide/include/Halide.h
