@@ -10,17 +10,33 @@ RUN apt-get update && \
       python3 \
       python3-pip \
       python3-dev \
-      llvm-dev \
-      clang \
       libtinfo-dev \
       zlib1g-dev \
       libxml2-dev \
       curl \
-      ca-certificates && \
+      ca-certificates \
+      gnupg \
+      lsb-release \
+      software-properties-common && \
     rm -rf /var/lib/apt/lists/*
 
 # Halide currently requires CMake >= 3.28
 RUN python3 -m pip install --no-cache-dir "cmake>=3.28"
+
+# Install LLVM/Clang/LLD 21 from apt.llvm.org
+RUN bash -lc 'set -euo pipefail; \
+    curl -fsSL https://apt.llvm.org/llvm.sh -o /tmp/llvm.sh; \
+    chmod +x /tmp/llvm.sh; \
+    /tmp/llvm.sh 21; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends llvm-21 llvm-21-dev clang-21 lld-21 liblld-21-dev; \
+    rm -rf /var/lib/apt/lists/* /tmp/llvm.sh'
+
+ENV CC=clang-21 \
+    CXX=clang++-21 \
+    LLVM_DIR=/usr/lib/llvm-21/lib/cmake/llvm \
+    Clang_DIR=/usr/lib/llvm-21/lib/cmake/clang \
+    LLD_DIR=/usr/lib/llvm-21/lib/cmake/lld
 
 WORKDIR /opt/halide
 COPY third_party/Halide/ /opt/halide/
