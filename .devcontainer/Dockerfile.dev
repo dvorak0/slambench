@@ -66,7 +66,8 @@ ENV CC=clang-21 \
     CMAKE_PREFIX_PATH=/usr/local/lib/cmake/FlatBuffers
 
 WORKDIR /opt/halide
-COPY third_party/Halide/ /opt/halide/
+# Clone Halide instead of copying submodule (submodules don't work in Docker COPY)
+RUN git clone --depth 1 --branch master https://github.com/halide/Halide.git /opt/halide
 
 RUN cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
       -DFlatBuffers_DIR=/usr/local/lib/cmake/FlatBuffers \
