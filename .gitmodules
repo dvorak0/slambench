@@ -7,3 +7,6 @@
 [submodule "gtsam"]
 	path = gtsam
 	url = https://github.com/dvorak0/gtsam.git
+[submodule "third_party/Halide"]
+	path = third_party/Halide
+	url = https://github.com/halide/Halide.git

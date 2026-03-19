@@ -1,0 +1,34 @@
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+      build-essential \
+      cmake \
+      ninja-build \
+      git \
+      python3 \
+      python3-pip \
+      python3-dev \
+      llvm-dev \
+      clang \
+      libtinfo-dev \
+      zlib1g-dev \
+      libxml2-dev \
+      curl \
+      ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /opt/halide
+COPY third_party/Halide/ /opt/halide/
+
+RUN cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release && \
+    cmake --build build -j1
+
+RUN test -f /opt/halide/build/src/Halide.h || test -f /opt/halide/include/Halide.h
+RUN find /opt/halide/build -name 'libHalide.so*' -o -name 'libHalide.a' | tee /tmp/halide_libs.txt && test -s /tmp/halide_libs.txt
+RUN find /opt/halide/build -name '*autoschedule*' | tee /tmp/autoschedulers.txt && test -s /tmp/autoschedulers.txt
+
+WORKDIR /workspace
+CMD ["bash"]
