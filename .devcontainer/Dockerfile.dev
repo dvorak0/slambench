@@ -16,8 +16,6 @@ RUN apt-get update && \
       libcurl4-openssl-dev \
       libedit-dev \
       libzstd-dev \
-      flatbuffers-compiler \
-      libflatbuffers-dev \
       curl \
       ca-certificates \
       gnupg \
@@ -29,6 +27,17 @@ RUN apt-get update && \
 
 # Halide currently requires CMake >= 3.28
 RUN python3 -m pip install --no-cache-dir "cmake>=3.28"
+
+# Ubuntu 22.04 ships an older flatc that is incompatible with current Halide.
+# Build a newer FlatBuffers from source and install its CMake package config.
+RUN git clone --depth 1 --branch v25.2.10 https://github.com/google/flatbuffers.git /tmp/flatbuffers && \
+    cmake -S /tmp/flatbuffers -B /tmp/flatbuffers/build -G Ninja \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DFLATBUFFERS_BUILD_TESTS=OFF \
+      -DFLATBUFFERS_INSTALL=ON && \
+    cmake --build /tmp/flatbuffers/build -j1 && \
+    cmake --install /tmp/flatbuffers/build && \
+    rm -rf /tmp/flatbuffers
 
 # Install LLVM/Clang/LLD 21 from apt.llvm.org.
 RUN bash -lc 'set -euo pipefail; \
@@ -54,25 +63,13 @@ ENV CC=clang-21 \
     LLVM_DIR=/usr/lib/llvm-21/lib/cmake/llvm \
     Clang_DIR=/usr/lib/llvm-21/lib/cmake/clang \
     LLD_DIR=/usr/lib/llvm-21/lib/cmake/lld \
-    CMAKE_PREFIX_PATH=/usr/lib/x86_64-linux-gnu/cmake/flatbuffers
+    CMAKE_PREFIX_PATH=/usr/local/lib/cmake/FlatBuffers
 
 WORKDIR /opt/halide
 COPY third_party/Halide/ /opt/halide/
 
-# Ubuntu's flatbuffers package installs FlatbuffersConfig.cmake (lower-case b),
-# while Halide looks for FlatBuffersConfig.cmake. Provide the expected alias.
-RUN bash -lc 'set -euo pipefail; \
-    fb_dir=/usr/lib/x86_64-linux-gnu/cmake/flatbuffers; \
-    if [ -f "$fb_dir/FlatbuffersConfig.cmake" ] && [ ! -f "$fb_dir/FlatBuffersConfig.cmake" ]; then \
-      ln -sf "$fb_dir/FlatbuffersConfig.cmake" "$fb_dir/FlatBuffersConfig.cmake"; \
-    fi; \
-    if [ -f "$fb_dir/FlatbuffersConfigVersion.cmake" ] && [ ! -f "$fb_dir/FlatBuffersConfigVersion.cmake" ]; then \
-      ln -sf "$fb_dir/FlatbuffersConfigVersion.cmake" "$fb_dir/FlatBuffersConfigVersion.cmake"; \
-    fi; \
-    ls -la "$fb_dir"'
-
 RUN cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
-      -DFlatBuffers_DIR=/usr/lib/x86_64-linux-gnu/cmake/flatbuffers \
+      -DFlatBuffers_DIR=/usr/local/lib/cmake/FlatBuffers \
       -DHalide_WASM_BACKEND=OFF \
       -DWITH_PYTHON_BINDINGS=OFF \
       -DWITH_PYTHON_STUBS=OFF && \
