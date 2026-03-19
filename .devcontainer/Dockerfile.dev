@@ -39,7 +39,11 @@ RUN bash -lc 'set -euo pipefail; \
     apt-get install -y --fix-missing --no-install-recommends \
       llvm-21 llvm-21-dev \
       clang-21 libclang-21-dev \
-      lld-21 liblld-21-dev'
+      lld-21 liblld-21-dev; \
+    if [ -f /usr/lib/x86_64-linux-gnu/cmake/flatbuffers/FlatbuffersConfig.cmake ]; then \
+      ln -sf /usr/lib/x86_64-linux-gnu/cmake/flatbuffers/FlatbuffersConfig.cmake /usr/lib/x86_64-linux-gnu/cmake/flatbuffers/FlatBuffersConfig.cmake; \
+      ln -sf /usr/lib/x86_64-linux-gnu/cmake/flatbuffers/FlatbuffersConfigVersion.cmake /usr/lib/x86_64-linux-gnu/cmake/flatbuffers/FlatBuffersConfigVersion.cmake; \
+    fi'
 
 ENV CC=clang-21 \
     CXX=clang++-21 \
