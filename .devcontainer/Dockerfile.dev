@@ -1,0 +1,98 @@
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+      build-essential \
+      ninja-build \
+      git \
+      python3 \
+      python3-pip \
+      python3-dev \
+      libtinfo-dev \
+      zlib1g-dev \
+      libxml2-dev \
+      libcurl4-openssl-dev \
+      libedit-dev \
+      libzstd-dev \
+      libopencv-dev \
+      pkg-config \
+      curl \
+      ca-certificates \
+      gnupg \
+      lsb-release \
+      software-properties-common \
+      wget \
+      xz-utils && \
+    rm -rf /var/lib/apt/lists/*
+
+# Halide currently requires CMake >= 3.28
+RUN python3 -m pip install --no-cache-dir "cmake>=3.28"
+
+# Ubuntu 22.04 ships an older flatc that is incompatible with current Halide.
+# Build a newer FlatBuffers from source and install its CMake package config.
+RUN git clone --depth 1 --branch v25.2.10 https://github.com/google/flatbuffers.git /tmp/flatbuffers && \
+    cmake -S /tmp/flatbuffers -B /tmp/flatbuffers/build -G Ninja \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DFLATBUFFERS_BUILD_TESTS=OFF \
+      -DFLATBUFFERS_INSTALL=ON && \
+    cmake --build /tmp/flatbuffers/build -j1 && \
+    cmake --install /tmp/flatbuffers/build && \
+    rm -rf /tmp/flatbuffers
+
+# Install LLVM/Clang/LLD 21 from apt.llvm.org.
+RUN bash -lc 'set -euo pipefail; \
+    mkdir -p /etc/apt/keyrings; \
+    curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor -o /etc/apt/keyrings/llvm.gpg; \
+    echo "deb [signed-by=/etc/apt/keyrings/llvm.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-21 main" > /etc/apt/sources.list.d/llvm.list; \
+    printf "Acquire::Retries \"10\";\nAcquire::http::Timeout \"30\";\nAcquire::https::Timeout \"30\";\n" > /etc/apt/apt.conf.d/80-retries; \
+    apt-get update; \
+    for i in 1 2 3 4 5; do \
+      apt-get install -y --fix-missing --no-install-recommends \
+        llvm-21 llvm-21-dev \
+        clang-21 libclang-21-dev \
+        lld-21 liblld-21-dev && break || { echo "llvm install retry $i"; sleep 15; }; \
+    done; \
+    dpkg -s llvm-21 llvm-21-dev clang-21 libclang-21-dev lld-21 liblld-21-dev >/dev/null; \
+    if [ -f /usr/lib/x86_64-linux-gnu/cmake/flatbuffers/FlatbuffersConfig.cmake ]; then \
+      ln -sf /usr/lib/x86_64-linux-gnu/cmake/flatbuffers/FlatbuffersConfig.cmake /usr/lib/x86_64-linux-gnu/cmake/flatbuffers/FlatBuffersConfig.cmake; \
+      ln -sf /usr/lib/x86_64-linux-gnu/cmake/flatbuffers/FlatbuffersConfigVersion.cmake /usr/lib/x86_64-linux-gnu/cmake/flatbuffers/FlatBuffersConfigVersion.cmake; \
+    fi'
+
+ENV CC=clang-21 \
+    CXX=clang++-21 \
+    LLVM_DIR=/usr/lib/llvm-21/lib/cmake/llvm \
+    Clang_DIR=/usr/lib/llvm-21/lib/cmake/clang \
+    LLD_DIR=/usr/lib/llvm-21/lib/cmake/lld \
+    CMAKE_PREFIX_PATH=/usr/local/lib/cmake/FlatBuffers
+
+WORKDIR /opt/halide
+COPY third_party/Halide/ /opt/halide/
+
+RUN cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+      -DFlatBuffers_DIR=/usr/local/lib/cmake/FlatBuffers \
+      -DHalide_WASM_BACKEND=OFF \
+      -DWITH_PYTHON_BINDINGS=OFF \
+      -DWITH_TESTS=OFF \
+      -DWITH_TUTORIALS=OFF \
+      -DWITH_UTILS=OFF \
+      -DWITH_AUTOSCHEDULERS=ON && \
+    cmake --build build -j1 && \
+    cmake --install build
+
+RUN test -f /usr/local/include/Halide.h
+RUN find /usr/local/lib -name 'libHalide.so*' -o -name 'libHalide.a' | tee /tmp/halide_libs.txt && test -s /tmp/halide_libs.txt
+RUN find /usr/local/lib -name '*autoschedule*' | tee /tmp/autoschedulers.txt && test -s /tmp/autoschedulers.txt
+
+WORKDIR /workspace
+COPY frontend/ /workspace/frontend/
+COPY data/euroc/frame0.png /workspace/data/euroc/frame0.png
+COPY data/euroc/frame1.png /workspace/data/euroc/frame1.png
+RUN bash /workspace/frontend/build_harris_aot.sh && \
+    cmake -S /workspace/frontend -B /workspace/frontend/build -G Ninja && \
+    cmake --build /workspace/frontend/build -j1 && \
+    /workspace/frontend/build/frontend_halide_harris_lk /workspace/data/euroc/frame0.png /workspace/data/euroc/frame1.png
+
+WORKDIR /workspace/frontend/build
+CMD ["bash"]
