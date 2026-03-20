@@ -14,7 +14,7 @@ add_executable(frontend_orb_bf frontend_orb_bf.cpp)
 target_link_libraries(frontend_orb_bf PRIVATE ${OpenCV_LIBS})
 
 # Halide include path
-set(HALIDE_INCLUDE_DIR "/usr/local/lib/python3.10/dist-packages/halide/include")
+set(HALIDE_INCLUDE_DIR "/usr/local/include")
 
 # Harris AOT tests
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/harris_manual.a)

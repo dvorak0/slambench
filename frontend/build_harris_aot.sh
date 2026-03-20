@@ -5,8 +5,9 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-HALIDE_ROOT=/usr/local/lib/python3.10/dist-packages/halide
-export LD_LIBRARY_PATH=$HALIDE_ROOT/lib64:$LD_LIBRARY_PATH
+HALIDE_INCLUDE_ROOT=/usr/local/include
+HALIDE_LIB_ROOT=/usr/local/lib
+export LD_LIBRARY_PATH=$HALIDE_LIB_ROOT:${LD_LIBRARY_PATH:-}
 
 cd $SCRIPT_DIR
 
@@ -18,8 +19,8 @@ echo "=========================================="
 echo "[1/3] Compiling Harris generator..."
 g++ harris_generator.cpp \
     -g -std=c++17 -fno-rtti \
-    -I $HALIDE_ROOT/include \
-    -L $HALIDE_ROOT/lib64 \
+    -I $HALIDE_INCLUDE_ROOT \
+    -L $HALIDE_LIB_ROOT \
     -lHalide -lpthread -ldl \
     -o harris_generator
 
@@ -42,7 +43,7 @@ echo "[3/3] Generating AOT (auto schedule)..."
     -g harris \
     -f harris_auto \
     -e static_library,h,schedule \
-    -p $HALIDE_ROOT/lib64/libautoschedule_mullapudi2016.so \
+    -p $HALIDE_LIB_ROOT/libautoschedule_mullapudi2016.so \
     target=host \
     generator_mode=0 \
     autoscheduler=Mullapudi2016 \

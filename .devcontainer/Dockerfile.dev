@@ -16,6 +16,8 @@ RUN apt-get update && \
       libcurl4-openssl-dev \
       libedit-dev \
       libzstd-dev \
+      libopencv-dev \
+      pkg-config \
       curl \
       ca-certificates \
       gnupg \
@@ -66,8 +68,7 @@ ENV CC=clang-21 \
     CMAKE_PREFIX_PATH=/usr/local/lib/cmake/FlatBuffers
 
 WORKDIR /opt/halide
-# Clone Halide instead of copying submodule (submodules don't work in Docker COPY)
-RUN git clone --depth 1 --branch master https://github.com/halide/Halide.git /opt/halide
+COPY third_party/Halide/ /opt/halide/
 
 RUN cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
       -DFlatBuffers_DIR=/usr/local/lib/cmake/FlatBuffers \
@@ -85,4 +86,9 @@ RUN find /usr/local/lib -name 'libHalide.so*' -o -name 'libHalide.a' | tee /tmp/
 RUN find /usr/local/lib -name '*autoschedule*' | tee /tmp/autoschedulers.txt && test -s /tmp/autoschedulers.txt
 
 WORKDIR /workspace
+COPY frontend/ /workspace/frontend/
+RUN bash /workspace/frontend/build_harris_aot.sh && \
+    cmake -S /workspace/frontend -B /workspace/frontend/build -G Ninja && \
+    cmake --build /workspace/frontend/build -j1
+
 CMD ["bash"]
