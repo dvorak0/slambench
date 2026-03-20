@@ -87,8 +87,12 @@ RUN find /usr/local/lib -name '*autoschedule*' | tee /tmp/autoschedulers.txt && 
 
 WORKDIR /workspace
 COPY frontend/ /workspace/frontend/
+COPY data/euroc/frame0.png /workspace/data/euroc/frame0.png
+COPY data/euroc/frame1.png /workspace/data/euroc/frame1.png
 RUN bash /workspace/frontend/build_harris_aot.sh && \
     cmake -S /workspace/frontend -B /workspace/frontend/build -G Ninja && \
-    cmake --build /workspace/frontend/build -j1
+    cmake --build /workspace/frontend/build -j1 && \
+    /workspace/frontend/build/frontend_halide_harris_lk /workspace/data/euroc/frame0.png /workspace/data/euroc/frame1.png
 
+WORKDIR /workspace/frontend/build
 CMD ["bash"]
