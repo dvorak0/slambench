@@ -19,6 +19,7 @@ CERES_BIN="${CERES_BIN:-/opt/slambench/ceres-solver/build/bin/bundle_adjuster}"
 GTSAM_BAL_BIN="${GTSAM_BAL_BIN:-/opt/slambench/gtsam/build/examples/SFMExample_bal}"
 GTSAM_SMART_BIN="${GTSAM_SMART_BIN:-/opt/slambench/gtsam/build/examples/SFMExample_SmartFactor_bal}"
 G2O_BAL_BIN="${G2O_BAL_BIN:-/opt/slambench/g2o/build/bin/bal_example}"
+SYMFORCE_BIN="${SYMFORCE_BIN:-/opt/slambench/symforce/build/bin/examples/bundle_adjustment_in_the_large_example}"
 
 # Ceres' bundle_adjuster and g2o's bal_example both default to 5 iterations.
 # GTSAM's examples run to their own convergence test, so iteration counts differ
@@ -50,6 +51,9 @@ run_timed() {
 }
 
 parse_ceres_iters() { awk '/^Minimizer iterations/ {print $NF; exit}' "$1"; }
+parse_symforce_total() { awk -F'|' '/Optimizer<sym::Optimize>::Optimize/ {gsub(/ /,"",$3); print $3; exit}' "$1"; }
+parse_symforce_iters() { awk '/LM<sym::Optimize> \[iter/ {n++} END{print (n=="")?"-":n}' "$1"; }
+parse_symforce_cost()  { awk '/error prev\/linear\/new:/ {c=$0; sub(/.*prev\/linear\/new: /,"",c); split(c,a,","); split(a[1],b,"/"); v=b[3]} END{print (v=="")?"-":v}' "$1"; }
 parse_ceres_cost()  { awk '/^Final[[:space:]]+[0-9]/ {print $2; exit}' "$1"; }
 parse_gtsam_iters() { awk '/^iterations: / {print $2; exit}' "$1"; }
 parse_gtsam_cost()  { awk '/^final error:/ {print $3; exit}' "$1"; }
@@ -101,6 +105,12 @@ record gtsam_bal "${out%% *}" "$(parse_gtsam_iters "${out##* }")" "$(parse_gtsam
 if [[ -x "$GTSAM_SMART_BIN" ]]; then
   out=$(best_of gtsam_smartfactor "$GTSAM_SMART_BIN" "$DATASET_PATH")
   record gtsam_smartfactor "${out%% *}" "$(parse_gtsam_iters "${out##* }")" "$(parse_gtsam_cost "${out##* }")" "${out##* }"
+fi
+
+# --- SymForce ----------------------------------------------------------
+if [[ -x "$SYMFORCE_BIN" ]]; then
+  out=$(best_of symforce "$SYMFORCE_BIN" "$DATASET_PATH")
+  record symforce "${out%% *}" "$(parse_symforce_iters "${out##* }")" "$(parse_symforce_cost "${out##* }")" "${out##* }"
 fi
 
 # --- g2o ---------------------------------------------------------------
