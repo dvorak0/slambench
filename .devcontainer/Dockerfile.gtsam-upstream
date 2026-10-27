@@ -1,0 +1,32 @@
+# Upstream GTSAM (borglab/gtsam) on top of the slambench bal-g2o image.
+#
+# The repo pins a GTSAM fork for the historical benchmark numbers; this stage
+# adds *upstream* GTSAM including the point-batched multifrontal solver path
+# recommended in https://github.com/borglab/gtsam/issues/2299 (PR #2694) via
+# timing/timeSFMBAL.
+FROM slambench:bal-g2o
+
+USER root
+
+ARG GTSAM_REF=develop
+ENV GTSAM_REF=${GTSAM_REF}
+
+WORKDIR /opt/slambench
+RUN git clone --depth 1 --branch "${GTSAM_REF}" https://github.com/borglab/gtsam.git gtsam-upstream
+
+WORKDIR /opt/slambench/gtsam-upstream
+RUN mkdir -p build && cd build && \
+    cmake .. -DCMAKE_BUILD_TYPE=Release \
+             -DGTSAM_BUILD_EXAMPLES=ON \
+             -DGTSAM_BUILD_TESTS=OFF \
+             -DGTSAM_BUILD_UNSTABLE=OFF \
+             -DGTSAM_BUILD_UNSTABLE_EXAMPLES=OFF \
+             -DGTSAM_WITH_TBB=ON && \
+    make -j"$(nproc)" timeSFMBAL SFMExample_bal
+
+USER vscode
+WORKDIR /workspace
+
+# Smoke check: the point-batched multifrontal solver is only reachable when
+# CHOLMOD/METIS are found and the timing target built.
+RUN ls -l /opt/slambench/gtsam-upstream/build/timing/timeSFMBAL

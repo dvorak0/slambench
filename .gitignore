@@ -1,0 +1,5 @@
+
+# BAL three-way benchmark outputs
+three_way_out/
+gtsam_upstream.log
+g2o.log
