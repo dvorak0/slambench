@@ -1,8 +1,8 @@
 # BAL comparison: Ceres / SymForce / GTSAM / g2o
 
-Upstream issue: [borglab/gtsam#2299 — Significant runtime difference between CERES and GTSAM on same BAL problem](https://github.com/borglab/gtsam/issues/2299)
+Upstream issue: [borglab/gtsam#2299 - Significant runtime difference between CERES and GTSAM on same BAL problem](https://github.com/borglab/gtsam/issues/2299)
 
-The existing benchmark covers SymForce / Ceres / GTSAM / MSCKF, but never g2o. This document fills that gap: **how long does each backend need on the same BAL problem**, and does the Ceres–GTSAM gap from the issue reproduce here.
+The existing benchmark covers SymForce / Ceres / GTSAM / MSCKF, but never g2o. This document fills that gap: **how long does each backend need on the same BAL problem**, and does the Ceres-GTSAM gap from the issue reproduce here.
 
 ## Environment
 
@@ -45,7 +45,7 @@ g2o's converged chi2 `36067.8` is exactly 2x Ceres' cost `18033.9` (Ceres report
 
 **Takeaways**
 
-- The issue's core observation reproduces: on the same BAL problem `SFMExample_bal` is **6.6x** slower than Ceres (the issue reported 3.8x with TBB and 8.3x without — same order of magnitude).
+- The issue's core observation reproduces: on the same BAL problem `SFMExample_bal` is **6.6x** slower than Ceres (the issue reported 3.8x with TBB and 8.3x without - same order of magnitude).
 - SymForce (1.68 s, 11 iterations) is 4.6x slower than Ceres, in the same league as the classic GTSAM path; per iteration (0.153 s) it is 2x faster than the classic GTSAM path.
 - g2o has the cheapest iteration (0.087 s/it, 3.4x faster than the classic GTSAM path), but because of its conservative LM lambda initialisation **reaching the same accuracy actually costs 1.29 s**.
 - The repo's own `SmartFactor_bal` example already brings 2.39 s down to 0.885 s.
@@ -79,7 +79,7 @@ TBB is only worth 1.4x for the classic `SFMExample_bal`, consistent with the iss
 
 That is the point-batched multifrontal path recommended in the issue's conclusion (PR #2694): a **2.14x** speedup (1.388 -> 0.648 s). On a single core it already beats g2o's 5-iteration result, but is still slower than Ceres' dense Schur (0.364 s).
 
-> Caveat: suitesparse 5.10 on Ubuntu 22.04 provides no `CHOLMODConfig.cmake`, so neither g2o nor GTSAM enables CHOLMOD in this round (GTSAM's `--point-batch-schur-cholmod-only` aborts with *no CHOLMOD support*). `.devcontainer/CHOLMODConfig.cmake` (a minimal imported target) is in the repo; enabling it is the next step — the expectation is roughly 0.25 s for GTSAM batch + CHOLMOD, and g2o on CHOLMOD/METIS.
+> Caveat: suitesparse 5.10 on Ubuntu 22.04 provides no `CHOLMODConfig.cmake`, so neither g2o nor GTSAM enables CHOLMOD in this round (GTSAM's `--point-batch-schur-cholmod-only` aborts with *no CHOLMOD support*). `.devcontainer/CHOLMODConfig.cmake` (a minimal imported target) is in the repo; enabling it is the next step - the expectation is roughly 0.25 s for GTSAM batch + CHOLMOD, and g2o on CHOLMOD/METIS.
 
 ## Appendix: full backend harness (`run_backend.sh`, single core)
 
