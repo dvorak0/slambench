@@ -48,6 +48,21 @@ RUN mkdir -p build && cd build && \
              -DGTSAM_WITH_TBB=ON && \
     make -j"$(nproc)" SFMExample_bal SFMExample_SmartFactor_bal
 
+# Build g2o (BAL example) for the Ceres/GTSAM/g2o three-way comparison
+WORKDIR /opt/slambench/g2o
+COPY g2o/ /opt/slambench/g2o/
+RUN mkdir -p build && cd build && \
+    cmake .. -DCMAKE_BUILD_TYPE=Release \
+             -DBUILD_UNITTESTS=OFF \
+             -DG2O_BUILD_EXAMPLES=ON \
+             -DG2O_BUILD_APPS=OFF \
+             -DG2O_BUILD_BENCHMARKS=OFF \
+             -DG2O_USE_OPENGL=OFF \
+             -DG2O_USE_LOGGING=OFF \
+             -DG2O_USE_CHOLMOD=ON \
+             -DG2O_USE_CSPARSE=ON && \
+    make -j"$(nproc)" bal_example
+
 # Build MSCKF C solver
 WORKDIR /opt/slambench/msckf_c
 COPY msckf_c/ /opt/slambench/msckf_c/
@@ -85,7 +100,7 @@ RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && \
 
 # Copy scripts/data into the image workspace last so script-only edits keep prior layers cached.
 WORKDIR /workspace
-COPY run_symforce.sh run_ceres.sh run_gtsam.sh run_msckf.sh run_backend.sh run_benchmarks.sh run_frontend.sh README.md ./ 
+COPY run_symforce.sh run_ceres.sh run_gtsam.sh run_g2o.sh run_bal_three_way.sh run_gtsam_upstream.sh run_msckf.sh run_backend.sh run_benchmarks.sh run_frontend.sh README.md ./ 
 COPY data/ ./data/
 RUN chmod +x /workspace/run_*.sh
 

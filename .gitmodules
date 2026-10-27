@@ -7,3 +7,6 @@
 [submodule "gtsam"]
 	path = gtsam
 	url = https://github.com/dvorak0/gtsam.git
+[submodule "g2o"]
+	path = g2o
+	url = https://github.com/RainerKuemmerle/g2o.git
