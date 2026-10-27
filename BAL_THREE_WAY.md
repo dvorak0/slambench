@@ -25,12 +25,12 @@
 
 | engine | wall (s) | iters | per_iter (s) | vs 最快 | final cost |
 | --- | --- | --- | --- | --- | --- |
-| ceres_dense | 0.383 | 6 | 0.0638 | 1.00x | 1.803391e+04 |
-| ceres_sparse | 0.416 | 6 | 0.0693 | 1.09x | 1.803391e+04 |
-| **gtsam_bal**（SFMExample_bal） | **2.440** | 8 | 0.3050 | 6.37x | 20475.2566825 |
-| gtsam_smartfactor | 0.887 | 4 | 0.2218 | 2.32x | 21342.6200134 |
-| g2o_sparse（Eigen，5 iter） | 0.446 | 5 | 0.1115 | 1.16x | 7.469e+05（未收敛） |
-| g2o_pcg | 0.435 | 5 | 0.1087 | 1.14x | 7.469e+05（未收敛） |
+| ceres_dense | 0.371 | 6 | 0.0618 | 1.00x | 1.803391e+04 |
+| ceres_sparse | 0.404 | 6 | 0.0673 | 1.09x | 1.803391e+04 |
+| **gtsam_bal**（SFMExample_bal） | **2.400** | 8 | 0.3000 | 6.47x | 20475.2566825 |
+| gtsam_smartfactor | 0.888 | 4 | 0.2220 | 2.39x | 21342.6200134 |
+| g2o_sparse（Eigen，5 iter） | 0.436 | 5 | 0.0872 | 1.18x | 7.469e+05（未收敛） |
+| g2o_pcg | 0.438 | 5 | 0.0876 | 1.18x | 7.469e+05（未收敛） |
 
 ⚠️ g2o 的 `bal_example` 默认 `lambda = 7.1e4` 起跳、每步 /3，5 次迭代几乎没走到解。跑满到收敛：
 
@@ -43,19 +43,19 @@ g2o 收敛值 `36067.8` 正好是 Ceres `cost = 18033.9` 的 2 倍（Ceres 的 c
 
 **解读**
 
-- 复现了 issue 的核心现象：同一 BAL 问题，`SFMExample_bal` 比 Ceres 慢 **6.4x**（issue 原文 3.8x w/ TBB、8.3x w/o TBB，同一量级）。
-- g2o 单次迭代（0.111 s）比 GTSAM 经典路径（0.305 s）快 2.7x，但因为 LM lambda 初始化太保守，**达到同精度反而要 1.29 s**（Cerces 的 3.4x）。
-- GTSAM 的 `SmartFactor_bal`（本项目自己加的示例）已经把 2.44 s 压到 0.887 s。
+- 复现了 issue 的核心现象：同一 BAL 问题，`SFMExample_bal` 比 Ceres 慢 **6.5x**（issue 原文 3.8x w/ TBB、8.3x w/o TBB，同一量级）。
+- g2o 单次迭代（0.087 s）比 GTSAM 经典路径（0.305 s）快 2.7x，但因为 LM lambda 初始化太保守，**达到同精度反而要 1.29 s**（Cerces 的 3.4x）。
+- GTSAM 的 `SmartFactor_bal`（本项目自己加的示例）已经把 2.40 s 压到 0.888 s。
 
 ## 结果 2：全核（24 核，GTSAM 走 TBB）
 
 | engine | wall (s) | iters | per_iter (s) | 单核 → 全核 |
 | --- | --- | --- | --- | --- |
-| ceres_dense | 0.416 | 6 | 0.0693 | 0.38 → 0.42（单线程，噪声） |
-| ceres_sparse | 0.592 | 6 | 0.0987 | 0.42 → 0.59 |
-| gtsam_bal | 1.689 | 8 | 0.2111 | 2.44 → 1.69（1.4x） |
+| ceres_dense | 0.416 | 6 | 0.0693 | 0.37 → 0.42（单线程，噪声） |
+| ceres_sparse | 0.592 | 6 | 0.0987 | 0.40 → 0.59 |
+| gtsam_bal | 1.689 | 8 | 0.2111 | 2.40 → 1.69（1.4x） |
 | gtsam_smartfactor | 0.377 | 4 | 0.0943 | 0.89 → 0.38（2.4x） |
-| g2o_sparse | 0.442 | 5 | 0.0884 | 0.45 → 0.44（单线程） |
+| g2o_sparse | 0.442 | 5 | 0.0884 | 0.44 → 0.44（单线程） |
 | g2o_pcg | 0.439 | 5 | 0.0878 | 0.44 → 0.44（单线程） |
 
 TBB 对经典 `SFMExample_bal` 只值 1.4x，和 issue 里 @dvorak0 的观察一致（4.894 → 3.145 仅 1.6x）。
