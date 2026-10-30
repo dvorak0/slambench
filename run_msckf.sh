@@ -5,12 +5,14 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DATASET="${1:-problem-16-22106-pre.txt}"
 DATASET_PATH="$ROOT_DIR/data/dubrovnik/$DATASET"
 BUILD_DIR="$ROOT_DIR/msckf_c/build"
+WORKSPACE_BINARY_SCHUR="$BUILD_DIR/msckf_runner_schur"
 WORKSPACE_BINARY_RR="$BUILD_DIR/msckf_runner_rr"
 WORKSPACE_BINARY_RC="$BUILD_DIR/msckf_runner_rc"
 WORKSPACE_BINARY_CR="$BUILD_DIR/msckf_runner_cr"
 WORKSPACE_BINARY_CC="$BUILD_DIR/msckf_runner_cc"
 WORKSPACE_BINARY_OPENBLAS="$BUILD_DIR/msckf_runner_openblas"
 IMAGE_BINARY="/opt/slambench/msckf_c/build/msckf_runner"
+IMAGE_BINARY_SCHUR="/opt/slambench/msckf_c/build/msckf_runner_schur"
 IMAGE_BINARY_RR="/opt/slambench/msckf_c/build/msckf_runner_rr"
 IMAGE_BINARY_RC="/opt/slambench/msckf_c/build/msckf_runner_rc"
 IMAGE_BINARY_CR="/opt/slambench/msckf_c/build/msckf_runner_cr"
@@ -21,6 +23,7 @@ LOG_BASE="${LOG_FILE%.log}"
 if [[ "$LOG_BASE" == "$LOG_FILE" ]]; then
   LOG_BASE="$LOG_FILE"
 fi
+LOG_SCHUR="${LOG_BASE}_schur.log"
 LOG_RR="${LOG_BASE}_rr.log"
 LOG_RC="${LOG_BASE}_rc.log"
 LOG_CR="${LOG_BASE}_cr.log"
@@ -38,8 +41,12 @@ if [[ -d "$ROOT_DIR/msckf_c" ]]; then
   cmake -S "$ROOT_DIR/msckf_c" -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release >/dev/null
   cmake --build "$BUILD_DIR" --config Release -j >/dev/null
   MODE="workspace"
-elif [[ -x "$IMAGE_BINARY_RR" && -x "$IMAGE_BINARY_RC" && -x "$IMAGE_BINARY_CR" && -x "$IMAGE_BINARY_CC" ]]; then
+elif [[ -x "$IMAGE_BINARY_SCHUR" || ( -x "$IMAGE_BINARY_RR" && -x "$IMAGE_BINARY_RC" && -x "$IMAGE_BINARY_CR" && -x "$IMAGE_BINARY_CC" ) ]]; then
   MODE="image_multi"
+  if [[ ! -x "$IMAGE_BINARY_SCHUR" ]]; then
+    echo "[msckf] WARNING: $IMAGE_BINARY_SCHUR is missing, so the schur solver is skipped." >&2
+    echo "[msckf] WARNING: the image predates msckf_runner_schur; rebuild it, or mount msckf_c/ to build from source." >&2
+  fi
 elif [[ -x "$IMAGE_BINARY" ]]; then
   MODE="image_single"
 else
@@ -70,11 +77,17 @@ print_result() {
 }
 
 run_comparison() {
-  local bin_rr="$1"
-  local bin_rc="$2"
-  local bin_cr="$3"
-  local bin_cc="$4"
-  local bin_openblas="$5"
+  local bin_schur="$1"
+  local bin_rr="$2"
+  local bin_rc="$3"
+  local bin_cr="$4"
+  local bin_cc="$5"
+  local bin_openblas="${6:-}"
+
+  if [[ -x "$bin_schur" ]]; then
+    echo "[msckf] running schur: dense Schur normal equations + Cholesky..."
+    "$bin_schur" "$DATASET_PATH" > "$LOG_SCHUR" 2>&1
+  fi
 
   echo "[msckf] running rr: row-major storage + row-order elimination..."
   "$bin_rr" "$DATASET_PATH" > "$LOG_RR" 2>&1
@@ -95,12 +108,19 @@ run_comparison() {
       "$bin_openblas" "$DATASET_PATH" > "$LOG_OPENBLAS" 2>&1
   fi
 
-  cp "$LOG_RR" "$LOG_FILE"
+  if [[ -f "$LOG_SCHUR" ]]; then
+    cp "$LOG_SCHUR" "$LOG_FILE"
+  else
+    cp "$LOG_RR" "$LOG_FILE"
+  fi
 
   echo
-  echo "[msckf] layout/order/openblas comparison (seconds):"
-  printf "%-26s %12s %12s\n" "mode" "TIME(s)" "GlobalQR(s)"
+  echo "[msckf] schur / layout / openblas comparison (seconds):"
+  printf "%-26s %12s %12s\n" "mode" "TIME(s)" "GlobalSolve(s)"
   printf "%-26s %12s %12s\n" "--------------------------" "------------" "------------"
+  if [[ -f "$LOG_SCHUR" ]]; then
+    print_result "schur (H/b + chol)" "$LOG_SCHUR"
+  fi
   print_result "rr (row-major,row-order)" "$LOG_RR"
   print_result "rc (row-major,col-order)" "$LOG_RC"
   print_result "cr (col-major,row-order)" "$LOG_CR"
@@ -111,6 +131,9 @@ run_comparison() {
 
   echo
   echo "[msckf] logs:"
+  if [[ -f "$LOG_SCHUR" ]]; then
+    echo "  schur -> $LOG_SCHUR"
+  fi
   echo "  rr -> $LOG_RR"
   echo "  rc -> $LOG_RC"
   echo "  cr -> $LOG_CR"
@@ -120,13 +143,13 @@ run_comparison() {
   else
     echo "  openblas -> not built (OpenBLAS not found by CMake)"
   fi
-  echo "  default -> $LOG_FILE (rr, for compatibility)"
+  echo "  default -> $LOG_FILE (schur if available, else rr)"
 }
 
 if [[ "$MODE" == "workspace" ]]; then
-  run_comparison "$WORKSPACE_BINARY_RR" "$WORKSPACE_BINARY_RC" "$WORKSPACE_BINARY_CR" "$WORKSPACE_BINARY_CC" "$WORKSPACE_BINARY_OPENBLAS"
+  run_comparison "$WORKSPACE_BINARY_SCHUR" "$WORKSPACE_BINARY_RR" "$WORKSPACE_BINARY_RC" "$WORKSPACE_BINARY_CR" "$WORKSPACE_BINARY_CC" "$WORKSPACE_BINARY_OPENBLAS"
 elif [[ "$MODE" == "image_multi" ]]; then
-  run_comparison "$IMAGE_BINARY_RR" "$IMAGE_BINARY_RC" "$IMAGE_BINARY_CR" "$IMAGE_BINARY_CC" "$IMAGE_BINARY_OPENBLAS"
+  run_comparison "$IMAGE_BINARY_SCHUR" "$IMAGE_BINARY_RR" "$IMAGE_BINARY_RC" "$IMAGE_BINARY_CR" "$IMAGE_BINARY_CC" "$IMAGE_BINARY_OPENBLAS"
 else
   CMD="$IMAGE_BINARY $DATASET_PATH"
   echo "[msckf] command: $CMD"
