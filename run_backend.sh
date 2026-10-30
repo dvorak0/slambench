@@ -238,6 +238,8 @@ run_one_dataset() {
     msckf_schur_ci=$(parse_msckf_initial_cost "$msckf_schur_log")
     msckf_schur_cf=$(parse_msckf_final_cost "$msckf_schur_log")
   else
+    echo "[bench] WARNING: no schur log at $msckf_schur_log; msckf_schur will show as n/a." >&2
+    echo "[bench] WARNING: the image probably predates msckf_runner_schur - rebuild it, or mount msckf_c/ and run run_msckf.sh directly." >&2
     msckf_schur_t=""
     msckf_schur_iters=""
     msckf_schur_ci=""

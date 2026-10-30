@@ -68,7 +68,7 @@ WORKDIR /opt/slambench/msckf_c
 COPY msckf_c/ /opt/slambench/msckf_c/
 RUN mkdir -p build && cd build && \
     cmake .. -DCMAKE_BUILD_TYPE=Release && \
-    make -j"$(nproc)" msckf_runner msckf_runner_rr msckf_runner_rc msckf_runner_cr msckf_runner_cc
+    make -j"$(nproc)" msckf_runner msckf_runner_schur msckf_runner_rr msckf_runner_rc msckf_runner_cr msckf_runner_cc
 
 # Install OpenCV late so backend image layers stay cacheable when frontend changes
 RUN apt-get update && \
@@ -96,7 +96,7 @@ RUN apt-get update && \
 WORKDIR /opt/slambench/msckf_c
 RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && \
     cmake --build build -j"$(nproc)" --target \
-      msckf_runner msckf_runner_rr msckf_runner_rc msckf_runner_cr msckf_runner_cc msckf_runner_openblas
+      msckf_runner msckf_runner_schur msckf_runner_rr msckf_runner_rc msckf_runner_cr msckf_runner_cc msckf_runner_openblas
 
 # Copy scripts/data into the image workspace last so script-only edits keep prior layers cached.
 WORKDIR /workspace

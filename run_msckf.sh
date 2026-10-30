@@ -43,6 +43,10 @@ if [[ -d "$ROOT_DIR/msckf_c" ]]; then
   MODE="workspace"
 elif [[ -x "$IMAGE_BINARY_SCHUR" || ( -x "$IMAGE_BINARY_RR" && -x "$IMAGE_BINARY_RC" && -x "$IMAGE_BINARY_CR" && -x "$IMAGE_BINARY_CC" ) ]]; then
   MODE="image_multi"
+  if [[ ! -x "$IMAGE_BINARY_SCHUR" ]]; then
+    echo "[msckf] WARNING: $IMAGE_BINARY_SCHUR is missing, so the schur solver is skipped." >&2
+    echo "[msckf] WARNING: the image predates msckf_runner_schur; rebuild it, or mount msckf_c/ to build from source." >&2
+  fi
 elif [[ -x "$IMAGE_BINARY" ]]; then
   MODE="image_single"
 else
