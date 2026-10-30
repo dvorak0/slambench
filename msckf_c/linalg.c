@@ -269,3 +269,64 @@ int qr_solve_givens(double *A, int m, int n, double *b) {
   // Default behavior kept for backward compatibility.
   return qr_solve_givens_rm_row_order(A, m, n, b);
 }
+
+int invert_sym3(const double A[9], double Ainv[9]) {
+  const double a00 = A[0], a01 = A[1], a02 = A[2];
+  const double a11 = A[4], a12 = A[5];
+  const double a22 = A[8];
+  const double c00 = a11 * a22 - a12 * a12;
+  const double c01 = a02 * a12 - a01 * a22;
+  const double c02 = a01 * a12 - a02 * a11;
+  const double det = a00 * c00 + a01 * c01 + a02 * c02;
+  if (fabs(det) < 1e-14) return -1;
+  const double inv_det = 1.0 / det;
+  Ainv[0] = c00 * inv_det;
+  Ainv[1] = c01 * inv_det;
+  Ainv[2] = c02 * inv_det;
+  Ainv[3] = Ainv[1];
+  Ainv[4] = (a00 * a22 - a02 * a02) * inv_det;
+  Ainv[5] = (a01 * a02 - a00 * a12) * inv_det;
+  Ainv[6] = Ainv[2];
+  Ainv[7] = Ainv[5];
+  Ainv[8] = (a00 * a11 - a01 * a01) * inv_det;
+  return 0;
+}
+
+int cholesky_solve(double *A, int n, double *b) {
+  // In-place Cholesky A = L L^T (lower stored in A), then solve A x = b.
+  for (int i = 0; i < n; ++i) {
+    for (int j = 0; j <= i; ++j) {
+      double sum = A[i * n + j];
+      for (int k = 0; k < j; ++k) {
+        sum -= A[i * n + k] * A[j * n + k];
+      }
+      if (i == j) {
+        if (sum <= 1e-18) return -1;
+        A[i * n + i] = sqrt(sum);
+      } else {
+        A[i * n + j] = sum / A[j * n + j];
+      }
+    }
+    for (int j = i + 1; j < n; ++j) {
+      A[i * n + j] = 0.0;
+    }
+  }
+
+  // Forward: L y = b
+  for (int i = 0; i < n; ++i) {
+    double sum = b[i];
+    for (int k = 0; k < i; ++k) {
+      sum -= A[i * n + k] * b[k];
+    }
+    b[i] = sum / A[i * n + i];
+  }
+  // Back: L^T x = y
+  for (int i = n - 1; i >= 0; --i) {
+    double sum = b[i];
+    for (int k = i + 1; k < n; ++k) {
+      sum -= A[k * n + i] * b[k];
+    }
+    b[i] = sum / A[i * n + i];
+  }
+  return 0;
+}

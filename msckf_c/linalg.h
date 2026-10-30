@@ -37,4 +37,8 @@ int qr_solve_givens_rm_col_order(double *A, int m, int n, double *b);
 int qr_solve_givens_cm_row_order(double *A, int m, int n, double *b);
 int qr_solve_givens_cm_col_order(double *A, int m, int n, double *b);
 
+/* Dense SPD helpers for Schur camera system (row-major). */
+int invert_sym3(const double A[9], double Ainv[9]);
+int cholesky_solve(double *A, int n, double *b);
+
 #endif

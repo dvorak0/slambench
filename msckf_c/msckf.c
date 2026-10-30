@@ -320,11 +320,16 @@ int main(int argc, char **argv) {
   int global_camera_solve_calls = 0;
   int max_iters = 6;
   int valid_points = 0;
-#if defined(MSCKF_STORAGE_COL_MAJOR)
+#if defined(MSCKF_USE_SCHUR)
+  const char *global_storage_mode = "schur-dense";
+  const char *global_elim_mode = "analytic-schur";
+  const char *global_solver_mode = "schur_cholesky";
+#elif defined(MSCKF_STORAGE_COL_MAJOR)
   const char *global_storage_mode = "col-major";
 #else
   const char *global_storage_mode = "row-major";
 #endif
+#if !defined(MSCKF_USE_SCHUR)
 #if defined(MSCKF_USE_COL_QR)
   const char *global_elim_mode = "col-order";
 #else
@@ -338,6 +343,7 @@ int main(int argc, char **argv) {
 #endif
 #else
   const char *global_solver_mode = "givens";
+#endif
 #endif
 
   // Build point -> observation index lists
@@ -357,6 +363,33 @@ int main(int argc, char **argv) {
     point_obs[pid].indices[idx] = i;
   }
 
+#if defined(MSCKF_USE_SCHUR)
+  // Analytic Schur: after eliminating each point, accumulate camera Hessian
+  // directly into global H:  H += U - W V^{-1} W^T,  b += b_c - W V^{-1} b_p
+  const int max_local_dim = 9 * nc;
+  int *uniq_cams = malloc(sizeof(int) * (size_t)nc);
+  int *cam_local = malloc(sizeof(int) * (size_t)nc);
+  double *H = malloc(sizeof(double) * (size_t)state_dim * (size_t)state_dim);
+  double *dx = malloc(sizeof(double) * (size_t)state_dim);
+  // Per-camera blocks: W 9x3, U 9x9, b 9 — packed, then scatter into global H after elim.
+  double *W_cams = malloc(sizeof(double) * (size_t)nc * 27);
+  double *WV_cams = malloc(sizeof(double) * (size_t)nc * 27);
+  double *U_cams = malloc(sizeof(double) * (size_t)nc * 81);
+  double *b_cams = malloc(sizeof(double) * (size_t)nc * 9);
+  double *delta_pts = calloc((size_t)np * 3, sizeof(double));
+  unsigned char *cache_valid = calloc((size_t)np, 1);
+  int *cache_n_cams = calloc((size_t)np, sizeof(int));
+  int *cache_cam_ids = malloc(sizeof(int) * (size_t)np * (size_t)nc);
+  double *cache_Vinv = malloc(sizeof(double) * (size_t)np * 9);
+  double *cache_bp = malloc(sizeof(double) * (size_t)np * 3);
+  double *cache_W = malloc(sizeof(double) * (size_t)np * (size_t)nc * 27);
+  double *R_tmp = malloc(sizeof(double) * 9 * nc);
+  double *t_tmp = malloc(sizeof(double) * 3 * nc);
+  Camera *cams_tmp = malloc(sizeof(Camera) * nc);
+  Point *pts_tmp = malloc(sizeof(Point) * np);
+  (void)max_local_dim;
+#endif
+
   for (int iter = 0; iter < max_iters; ++iter) {
     double t_res0 = wall_seconds();
     double loss_prev = compute_loss(cams, R_all, pts, obs, no, huber_delta);
@@ -364,6 +397,269 @@ int main(int argc, char **argv) {
     residual_eval_calls++;
     printf("iter %d loss %.6f\n", iter, loss_prev);
 
+#if defined(MSCKF_USE_SCHUR)
+    double *delta_cam = NULL;
+    valid_points = 0;
+    memset(H, 0, sizeof(double) * (size_t)state_dim * (size_t)state_dim);
+    memset(dx, 0, sizeof(double) * (size_t)state_dim);
+    memset(delta_pts, 0, sizeof(double) * (size_t)np * 3);
+    memset(cache_valid, 0, (size_t)np);
+
+    double t_jac0 = wall_seconds();
+    double t_elim_acc = 0.0;
+    for (int pid = 0; pid < np; ++pid) {
+      int cnt = point_obs[pid].count;
+      if (cnt < 2) continue;
+
+      for (int i = 0; i < nc; ++i) cam_local[i] = -1;
+      int n_cams = 0;
+      for (int j = 0; j < cnt; ++j) {
+        int cam = obs[point_obs[pid].indices[j]].cam;
+        if (cam_local[cam] < 0) {
+          cam_local[cam] = n_cams;
+          uniq_cams[n_cams++] = cam;
+        }
+      }
+      memset(W_cams, 0, sizeof(double) * (size_t)n_cams * 27);
+      memset(U_cams, 0, sizeof(double) * (size_t)n_cams * 81);
+      memset(b_cams, 0, sizeof(double) * (size_t)n_cams * 9);
+
+      double V[9] = {0};
+      double bp[3] = {0};
+
+      for (int j = 0; j < cnt; ++j) {
+        const Observation *o = &obs[point_obs[pid].indices[j]];
+        const Camera *c = &cams[o->cam];
+        const double *R = &R_all[o->cam * 9];
+        double up, vp;
+        project(c, R, pts[o->point].p, &up, &vp);
+        double du = up - o->u;
+        double dv = vp - o->v;
+        double sw = 1.0;
+        if (huber_delta > 0.0) {
+          sw = sqrt(huber_weight(du * du + dv * dv, huber_delta));
+        }
+        double r0 = -sw * du;
+        double r1 = -sw * dv;
+
+        double Jc[18], Jf[6];
+        jacobians(c, R, pts[o->point].p, Jc, Jf);
+        double Jf0[3] = {sw * Jf[0], sw * Jf[1], sw * Jf[2]};
+        double Jf1[3] = {sw * Jf[3], sw * Jf[4], sw * Jf[5]};
+        double Jc0[9], Jc1[9];
+        for (int col = 0; col < 9; ++col) {
+          Jc0[col] = sw * Jc[col];
+          Jc1[col] = sw * Jc[9 + col];
+        }
+
+        bp[0] += Jf0[0] * r0 + Jf1[0] * r1;
+        bp[1] += Jf0[1] * r0 + Jf1[1] * r1;
+        bp[2] += Jf0[2] * r0 + Jf1[2] * r1;
+        for (int a = 0; a < 3; ++a) {
+          for (int bb = a; bb < 3; ++bb) {
+            double s = Jf0[a] * Jf0[bb] + Jf1[a] * Jf1[bb];
+            V[a * 3 + bb] += s;
+            if (a != bb) V[bb * 3 + a] += s;
+          }
+        }
+
+        const int li = cam_local[o->cam];
+        double *Wblk = &W_cams[(size_t)li * 27];
+        double *Ublk = &U_cams[(size_t)li * 81];
+        double *bblk = &b_cams[(size_t)li * 9];
+        for (int row = 0; row < 9; ++row) {
+          bblk[row] += Jc0[row] * r0 + Jc1[row] * r1;
+          Wblk[row * 3 + 0] += Jc0[row] * Jf0[0] + Jc1[row] * Jf1[0];
+          Wblk[row * 3 + 1] += Jc0[row] * Jf0[1] + Jc1[row] * Jf1[1];
+          Wblk[row * 3 + 2] += Jc0[row] * Jf0[2] + Jc1[row] * Jf1[2];
+          for (int col = 0; col < 9; ++col) {
+            Ublk[row * 9 + col] += Jc0[row] * Jc0[col] + Jc1[row] * Jc1[col];
+          }
+        }
+      }
+
+      double vtrace = V[0] + V[4] + V[8];
+      double veps = 1e-10 * (vtrace > 0.0 ? vtrace / 3.0 : 1.0);
+      V[0] += veps;
+      V[4] += veps;
+      V[8] += veps;
+      double Vinv[9];
+      if (invert_sym3(V, Vinv) != 0) {
+        continue;
+      }
+      valid_points++;
+
+      double t_e0 = wall_seconds();
+      // After point elim: scatter H += U - W Vinv W^T, b += b_c - W Vinv bp
+      // straight into the global camera Hessian (no tall Hx / no H_local).
+      for (int ci = 0; ci < n_cams; ++ci) {
+        const double *Wi = &W_cams[(size_t)ci * 27];
+        double *Yi = &WV_cams[(size_t)ci * 27];
+        for (int r = 0; r < 9; ++r) {
+          Yi[r * 3 + 0] = Wi[r * 3 + 0] * Vinv[0] + Wi[r * 3 + 1] * Vinv[3] + Wi[r * 3 + 2] * Vinv[6];
+          Yi[r * 3 + 1] = Wi[r * 3 + 0] * Vinv[1] + Wi[r * 3 + 1] * Vinv[4] + Wi[r * 3 + 2] * Vinv[7];
+          Yi[r * 3 + 2] = Wi[r * 3 + 0] * Vinv[2] + Wi[r * 3 + 1] * Vinv[5] + Wi[r * 3 + 2] * Vinv[8];
+        }
+      }
+      for (int ci = 0; ci < n_cams; ++ci) {
+        const double *Yi = &WV_cams[(size_t)ci * 27];
+        const double *Ui = &U_cams[(size_t)ci * 81];
+        const double *bi = &b_cams[(size_t)ci * 9];
+        const int gi0 = uniq_cams[ci] * 9;
+        for (int r = 0; r < 9; ++r) {
+          dx[gi0 + r] += bi[r] - (Yi[r * 3 + 0] * bp[0] + Yi[r * 3 + 1] * bp[1] + Yi[r * 3 + 2] * bp[2]);
+        }
+        // Diagonal camera block: U - Y W_i^T
+        {
+          const double *Wi = &W_cams[(size_t)ci * 27];
+          for (int r = 0; r < 9; ++r) {
+            double *Hrow = &H[(gi0 + r) * state_dim + gi0];
+            const double y0 = Yi[r * 3 + 0], y1 = Yi[r * 3 + 1], y2 = Yi[r * 3 + 2];
+            for (int c = 0; c < 9; ++c) {
+              Hrow[c] += Ui[r * 9 + c] - (y0 * Wi[c * 3 + 0] + y1 * Wi[c * 3 + 1] + y2 * Wi[c * 3 + 2]);
+            }
+          }
+        }
+        // Off-diagonal camera blocks: - Y W_j^T
+        for (int cj = 0; cj < n_cams; ++cj) {
+          if (cj == ci) continue;
+          const double *Wj = &W_cams[(size_t)cj * 27];
+          const int gj0 = uniq_cams[cj] * 9;
+          for (int r = 0; r < 9; ++r) {
+            double *Hrow = &H[(gi0 + r) * state_dim + gj0];
+            const double y0 = Yi[r * 3 + 0], y1 = Yi[r * 3 + 1], y2 = Yi[r * 3 + 2];
+            for (int c = 0; c < 9; ++c) {
+              Hrow[c] -= y0 * Wj[c * 3 + 0] + y1 * Wj[c * 3 + 1] + y2 * Wj[c * 3 + 2];
+            }
+          }
+        }
+      }
+      t_elim_acc += wall_seconds() - t_e0;
+
+      cache_valid[pid] = 1;
+      cache_n_cams[pid] = n_cams;
+      memcpy(&cache_cam_ids[(size_t)pid * (size_t)nc], uniq_cams, sizeof(int) * (size_t)n_cams);
+      memcpy(&cache_Vinv[(size_t)pid * 9], Vinv, sizeof(double) * 9);
+      memcpy(&cache_bp[(size_t)pid * 3], bp, sizeof(double) * 3);
+      memcpy(&cache_W[(size_t)pid * (size_t)nc * 27], W_cams, sizeof(double) * (size_t)n_cams * 27);
+    }
+    jacobian_eval_time += wall_seconds() - t_jac0 - t_elim_acc;
+    point_elim_time += t_elim_acc;
+    jacobian_eval_calls += valid_points;
+    point_elim_calls += valid_points;
+
+    for (int j = 0; j < state_dim; ++j) {
+      double lam = (j < 6) ? anchor_lambda : reg_lambda;
+      H[j * state_dim + j] += lam;
+    }
+
+    double t_cam_solve0 = wall_seconds();
+    int solve_status = cholesky_solve(H, state_dim, dx);
+    global_camera_solve_time += wall_seconds() - t_cam_solve0;
+    global_camera_solve_calls++;
+    if (solve_status != 0) {
+      fprintf(stderr, "schur cholesky failed at iter %d\n", iter);
+      break;
+    }
+    delta_cam = dx;
+
+    double t_backsolve0 = wall_seconds();
+    for (int pid = 0; pid < np; ++pid) {
+      if (!cache_valid[pid]) continue;
+      int n_cams = cache_n_cams[pid];
+      const int *cams_ids = &cache_cam_ids[(size_t)pid * (size_t)nc];
+      const double *Wp = &cache_W[(size_t)pid * (size_t)nc * 27];
+      const double *Vinv = &cache_Vinv[(size_t)pid * 9];
+      const double *bp = &cache_bp[(size_t)pid * 3];
+      double WTdx[3] = {0, 0, 0};
+      for (int ci = 0; ci < n_cams; ++ci) {
+        const double *Wi = &Wp[(size_t)ci * 27];
+        const int gi0 = cams_ids[ci] * 9;
+        for (int r = 0; r < 9; ++r) {
+          double d = delta_cam[gi0 + r];
+          WTdx[0] += Wi[r * 3 + 0] * d;
+          WTdx[1] += Wi[r * 3 + 1] * d;
+          WTdx[2] += Wi[r * 3 + 2] * d;
+        }
+      }
+      double rhs[3] = {bp[0] - WTdx[0], bp[1] - WTdx[1], bp[2] - WTdx[2]};
+      delta_pts[3 * pid + 0] = Vinv[0] * rhs[0] + Vinv[1] * rhs[1] + Vinv[2] * rhs[2];
+      delta_pts[3 * pid + 1] = Vinv[3] * rhs[0] + Vinv[4] * rhs[1] + Vinv[5] * rhs[2];
+      delta_pts[3 * pid + 2] = Vinv[6] * rhs[0] + Vinv[7] * rhs[1] + Vinv[8] * rhs[2];
+    }
+    point_backsolve_time += wall_seconds() - t_backsolve0;
+    point_backsolve_calls += valid_points;
+
+    // Backtracking line search on step length
+    double alpha = 1.0;
+    double loss_new = loss_prev;
+    int accepted = 0;
+    while (alpha > 1e-4) {
+      memcpy(R_tmp, R_all, sizeof(double) * 9 * nc);
+      memcpy(pts_tmp, pts, sizeof(Point) * np);
+      for (int i = 0; i < nc; ++i) {
+        cams_tmp[i] = cams[i];
+        t_tmp[3 * i + 0] = cams[i].t[0];
+        t_tmp[3 * i + 1] = cams[i].t[1];
+        t_tmp[3 * i + 2] = cams[i].t[2];
+      }
+      // Apply scaled update to temp
+      for (int i = 0; i < nc; ++i) {
+        const double *d = &delta_cam[i * 9];
+        double dtheta[3] = {alpha * d[0], alpha * d[1], alpha * d[2]};
+        double dt[3] = {alpha * d[3], alpha * d[4], alpha * d[5]};
+        double dR[9];
+        mat3_expmap(dtheta, dR);
+        double newR[9];
+        mat3_mul(dR, &R_tmp[i * 9], newR);
+        memcpy(&R_tmp[i * 9], newR, sizeof(double) * 9);
+        t_tmp[3 * i + 0] += dt[0];
+        t_tmp[3 * i + 1] += dt[1];
+        t_tmp[3 * i + 2] += dt[2];
+        cams_tmp[i].t[0] = t_tmp[3 * i + 0];
+        cams_tmp[i].t[1] = t_tmp[3 * i + 1];
+        cams_tmp[i].t[2] = t_tmp[3 * i + 2];
+        cams_tmp[i].f += alpha * d[6];
+        cams_tmp[i].k1 += alpha * d[7];
+        cams_tmp[i].k2 += alpha * d[8];
+      }
+      for (int i = 0; i < np; ++i) {
+        pts_tmp[i].p[0] += alpha * delta_pts[3 * i + 0];
+        pts_tmp[i].p[1] += alpha * delta_pts[3 * i + 1];
+        pts_tmp[i].p[2] += alpha * delta_pts[3 * i + 2];
+      }
+      double t_res1 = wall_seconds();
+      loss_new = compute_loss(cams_tmp, R_tmp, pts_tmp, obs, no, huber_delta);
+      residual_eval_time += wall_seconds() - t_res1;
+      residual_eval_calls++;
+      if (loss_new < loss_prev) {
+        accepted = 1;
+        break;
+      }
+      alpha *= 0.5;
+    }
+    if (accepted) {
+      memcpy(R_all, R_tmp, sizeof(double) * 9 * nc);
+      for (int i = 0; i < nc; ++i) {
+        cams[i].t[0] = t_tmp[3 * i + 0];
+        cams[i].t[1] = t_tmp[3 * i + 1];
+        cams[i].t[2] = t_tmp[3 * i + 2];
+        const double *d = &delta_cam[i * 9];
+        cams[i].f += alpha * d[6];
+        cams[i].k1 += alpha * d[7];
+        cams[i].k2 += alpha * d[8];
+      }
+      memcpy(pts, pts_tmp, sizeof(Point) * np);
+      printf("  step alpha=%.4f loss=%.6f\n", alpha, loss_new);
+      if (fabs(loss_prev - loss_new) < 1e-6 * (1.0 + fabs(loss_prev))) {
+        max_iters = iter + 1;
+        accepted = 2;
+      }
+    } else {
+      printf("  step rejected (no decrease)\n");
+    }
+    if (accepted == 2) break;
+#else
     // Count rows after eliminating points: sum(max(0, 2*obs-3))
     int total_rows = 0;
     for (int pid = 0; pid < np; ++pid) {
@@ -607,8 +903,31 @@ int main(int argc, char **argv) {
     free(delta_pts);
     free(Hred);
     free(bred);
+#endif
   }
   double total_time = wall_seconds() - total_start;
+
+#if defined(MSCKF_USE_SCHUR)
+  free(uniq_cams);
+  free(cam_local);
+  free(H);
+  free(dx);
+  free(W_cams);
+  free(WV_cams);
+  free(U_cams);
+  free(b_cams);
+  free(delta_pts);
+  free(cache_valid);
+  free(cache_n_cams);
+  free(cache_cam_ids);
+  free(cache_Vinv);
+  free(cache_bp);
+  free(cache_W);
+  free(R_tmp);
+  free(t_tmp);
+  free(cams_tmp);
+  free(pts_tmp);
+#endif
 
   printf("points_used: %d\n", valid_points);
   printf("dataset_points: %d\n", np);
